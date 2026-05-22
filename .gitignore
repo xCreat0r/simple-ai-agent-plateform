@@ -11,4 +11,7 @@ yarn-error.log*
 .vscode/*
 .idea/
 dist/
+.next/
+drizzle/
 .DS_Store
+.env.local
