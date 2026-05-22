@@ -94,7 +94,13 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
-    async start(controller) {
+    start(controller) {
+      runStream(controller);
+    },
+  });
+
+  async function runStream(controller: ReadableStreamDefaultController) {
+    try {
       let currentMessages = [...conversationMessages];
       let fullContent = "";
       const maxSteps = 5;
@@ -215,13 +221,17 @@ export async function POST(req: Request) {
       }
 
       controller.close();
-    },
-  });
+    } catch (err) {
+      controller.error(err);
+    }
+  }
 
   return new Response(stream, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "x-chat-id": chatId,
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
     },
   });
 }

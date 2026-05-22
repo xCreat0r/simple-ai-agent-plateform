@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ChatInput } from "@/components/chat/chat-input";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 interface ChatItem {
   id: string;
@@ -44,7 +44,7 @@ export default function AgentChatPage({
     const res = await fetch(`/api/chats?agentId=${agentId}`);
     const data = await res.json();
     setChats(data);
-    if (data.length > 0) {
+    if (data.length > 0 && chatIdRef.current == null) {
       selectChat(data[0].id);
     }
   }
@@ -61,6 +61,17 @@ export default function AgentChatPage({
     setChatId(null);
     chatIdRef.current = null;
     setMessages([]);
+  }
+
+  async function deleteChat(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    await fetch(`/api/chats/${id}`, { method: "DELETE" });
+    if (chatIdRef.current === id) {
+      setChatId(null);
+      chatIdRef.current = null;
+      setMessages([]);
+    }
+    loadChats();
   }
 
   async function handleSend(text: string) {
@@ -153,17 +164,23 @@ export default function AgentChatPage({
           </button>
           <div className="mt-2 space-y-0.5">
             {chats.map((c) => (
-              <button
+              <div
                 key={c.id}
                 onClick={() => selectChat(c.id)}
-                className={`w-full text-left text-sm px-2 py-1.5 rounded truncate ${
+                className={`group flex items-center w-full text-left text-sm px-2 py-1.5 rounded cursor-pointer truncate ${
                   chatId === c.id
                     ? "bg-gray-100 text-gray-900"
                     : "text-gray-500 hover:bg-gray-50"
                 }`}
               >
-                {c.title}
-              </button>
+                <span className="flex-1 truncate">{c.title}</span>
+                <button
+                  onClick={(e) => deleteChat(c.id, e)}
+                  className="shrink-0 ml-1 opacity-0 group-hover:opacity-100 hover:text-red-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ))}
           </div>
         </div>
