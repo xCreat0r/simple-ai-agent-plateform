@@ -3,10 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { Agent } from "@/lib/types";
-import { getAllTools } from "@/lib/tools";
+import { getToolName } from "@/lib/tools";
 
 export function AgentCard({ agent, onDelete }: { agent: Agent & { tools?: string[] }; onDelete?: () => void }) {
-  const toolList = getAllTools();
 
   return (
     <Card className="hover:shadow-sm transition-shadow">
@@ -22,14 +21,11 @@ export function AgentCard({ agent, onDelete }: { agent: Agent & { tools?: string
           {agent.systemPrompt || "无系统提示词"}
         </p>
         <div className="flex items-center gap-2 flex-wrap">
-          {agent.tools?.map((toolId) => {
-            const tool = toolList.find((t) => t.id === toolId);
-            return tool ? (
-              <Badge key={toolId} variant="secondary" className="text-xs">
-                {tool.name}
-              </Badge>
-            ) : null;
-          })}
+          {agent.tools?.map((toolId) => (
+            <Badge key={toolId} variant="secondary" className="text-xs">
+              {getToolName(toolId)}
+            </Badge>
+          ))}
           <div className="flex-1" />
           <Link
             href={`/agents/${agent.id}/edit`}

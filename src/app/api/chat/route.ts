@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { db } from "@/lib/db";
 import { agents, agentTools, chats, messages } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
-import { getTool } from "@/lib/tools";
+import { getTool } from "@/lib/tools/db-tools";
 
 const client = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY!,
@@ -79,8 +79,8 @@ export async function POST(req: Request) {
     }
   }
 
-  const toolDefs = enabledToolIds
-    .map((id) => getTool(id))
+  const enabledTools = await Promise.all(enabledToolIds.map((id) => getTool(id)));
+  const toolDefs = enabledTools
     .filter(Boolean)
     .map((t) => ({
       type: "function" as const,
@@ -177,7 +177,7 @@ export async function POST(req: Request) {
           });
 
           for (const tc of toolCallsArray) {
-            const tool = getTool(tc.name);
+            const tool = await getTool(tc.name);
             if (!tool) continue;
 
             let args: Record<string, unknown> = {};
