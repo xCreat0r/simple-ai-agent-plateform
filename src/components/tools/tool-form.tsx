@@ -9,25 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, X } from "lucide-react";
+import type { ToolData } from "@/lib/types";
 
 interface ParamRow {
   name: string;
   type: "string" | "number" | "boolean";
   description: string;
   required: boolean;
-}
-
-interface ToolData {
-  id: string;
-  name: string;
-  description: string;
-  endpoint: string;
-  method: string;
-  parameters: {
-    type: "object";
-    properties: Record<string, { type: string; description: string }>;
-    required: string[];
-  };
 }
 
 export function ToolForm({ tool }: { tool?: ToolData }) {
@@ -39,6 +27,7 @@ export function ToolForm({ tool }: { tool?: ToolData }) {
   const [method, setMethod] = useState(tool?.method ?? "POST");
   const [params, setParams] = useState<ParamRow[]>([]);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (tool?.parameters?.properties) {
@@ -102,6 +91,7 @@ export function ToolForm({ tool }: { tool?: ToolData }) {
       router.push("/tools");
       router.refresh();
     } else {
+      setError("保存失败，请重试");
       setSaving(false);
     }
   }
@@ -187,6 +177,12 @@ export function ToolForm({ tool }: { tool?: ToolData }) {
           </div>
         ))}
       </div>
+
+      {error && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          {error}
+        </p>
+      )}
 
       <div className="flex gap-3">
         <Button type="submit" disabled={saving}>

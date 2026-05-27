@@ -4,8 +4,10 @@ import { useState, useEffect, useRef, use } from "react";
 import Link from "next/link";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ChatInput } from "@/components/chat/chat-input";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
-import { Plus, X } from "lucide-react";
+import { Plus, X, MessageCircle } from "lucide-react";
 
 interface ChatItem {
   id: string;
@@ -30,13 +32,16 @@ export default function AgentChatPage({
   const [chatId, setChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const chatIdRef = useRef<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ChatItem | null>(null);
 
   useEffect(() => {
     fetch(`/api/agents/${agentId}`)
       .then((r) => r.json())
-      .then((d) => setAgentName(d.name));
+      .then((d) => setAgentName(d.name))
+      .catch(() => setError("加载 Agent 失败"));
     loadChats();
   }, [agentId]);
 
@@ -52,6 +57,7 @@ export default function AgentChatPage({
   async function selectChat(id: string) {
     setChatId(id);
     chatIdRef.current = id;
+    setError("");
     const res = await fetch(`/api/chats/${id}/messages`);
     const data = await res.json();
     setMessages(data);
@@ -61,16 +67,18 @@ export default function AgentChatPage({
     setChatId(null);
     chatIdRef.current = null;
     setMessages([]);
+    setError("");
   }
 
-  async function deleteChat(id: string, e: React.MouseEvent) {
-    e.stopPropagation();
-    await fetch(`/api/chats/${id}`, { method: "DELETE" });
-    if (chatIdRef.current === id) {
+  async function confirmDeleteChat() {
+    if (!deleteTarget) return;
+    await fetch(`/api/chats/${deleteTarget.id}`, { method: "DELETE" });
+    if (chatIdRef.current === deleteTarget.id) {
       setChatId(null);
       chatIdRef.current = null;
       setMessages([]);
     }
+    setDeleteTarget(null);
     loadChats();
   }
 
@@ -78,6 +86,7 @@ export default function AgentChatPage({
     if (loading || !text.trim()) return;
 
     setLoading(true);
+    setError("");
     const userMsg: MessageItem = {
       id: Date.now().toString(),
       role: "user",
@@ -99,6 +108,8 @@ export default function AgentChatPage({
         }),
         signal: controller.signal,
       });
+
+      if (!res.ok) throw new Error("请求失败");
 
       const newChatId = res.headers.get("x-chat-id");
       if (newChatId && !chatIdRef.current) {
@@ -130,9 +141,8 @@ export default function AgentChatPage({
         );
       }
     } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        console.error(err);
-      }
+      if ((err as Error).name === "AbortError") return;
+      setError("请求失败，请重试");
     } finally {
       setLoading(false);
       abortRef.current = null;
@@ -142,6 +152,8 @@ export default function AgentChatPage({
   function handleStop() {
     abortRef.current?.abort();
   }
+
+  const showEmpty = !chatId && messages.length === 0;
 
   return (
     <div className="h-screen flex">
@@ -175,7 +187,10 @@ export default function AgentChatPage({
               >
                 <span className="flex-1 truncate">{c.title}</span>
                 <button
-                  onClick={(e) => deleteChat(c.id, e)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget(c);
+                  }}
                   className="shrink-0 ml-1 opacity-0 group-hover:opacity-100 hover:text-red-600"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -192,9 +207,38 @@ export default function AgentChatPage({
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0">
-        <ChatMessages messages={messages} loading={loading} />
+        {showEmpty ? (
+          <EmptyState
+            icon={MessageCircle}
+            title="开始对话"
+            description="在下方输入消息，与 Agent 开始对话"
+          />
+        ) : (
+          <ChatMessages messages={messages} loading={loading} />
+        )}
+        {error && (
+          <div className="px-4 py-2">
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {error}
+              <button
+                onClick={() => setError("")}
+                className="ml-2 underline hover:no-underline"
+              >
+                关闭
+              </button>
+            </p>
+          </div>
+        )}
         <ChatInput loading={loading} onSend={handleSend} onStop={handleStop} />
       </main>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="删除对话"
+        description={`确定要删除「${deleteTarget?.title ?? ""}」？`}
+        onConfirm={confirmDeleteChat}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

@@ -1,29 +1,8 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { db } from "@/lib/db";
 import { tools, agentTools } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-
-const updateToolSchema = z.object({
-  name: z.string().min(1).optional(),
-  description: z.string().optional(),
-  parameters: z
-    .object({
-      type: z.literal("object"),
-      properties: z.record(
-        z.string(),
-        z.object({
-          type: z.enum(["string", "number", "boolean"]),
-          description: z.string().default(""),
-        })
-      ),
-      required: z.array(z.string()).default([]),
-    })
-    .optional(),
-  endpoint: z.string().url().optional(),
-  method: z.enum(["GET", "POST"]).optional(),
-  headers: z.record(z.string(), z.string()).nullable().optional(),
-});
+import { updateToolSchema } from "@/lib/validators";
 
 export async function GET(
   _req: Request,

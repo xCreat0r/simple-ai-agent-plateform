@@ -25,6 +25,7 @@ export function AgentForm({ agent }: AgentFormProps) {
   const [maxTokens, setMaxTokens] = useState(agent?.maxTokens ?? 4096);
   const [tools, setTools] = useState<string[]>(agent?.tools ?? []);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,6 +45,7 @@ export function AgentForm({ agent }: AgentFormProps) {
       router.push("/agents");
       router.refresh();
     } else {
+      setError("保存失败，请重试");
       setSaving(false);
     }
   }
@@ -101,6 +103,12 @@ export function AgentForm({ agent }: AgentFormProps) {
         <Label>工具</Label>
         <ToolSelector selected={tools} onChange={setTools} />
       </div>
+
+      {error && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          {error}
+        </p>
+      )}
 
       <div className="flex gap-3">
         <Button type="submit" disabled={saving}>

@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Wrench } from "lucide-react";
 import { db } from "@/lib/db";
 import { tools } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { getAllBuiltinTools } from "@/lib/tools";
 import { eq, desc } from "drizzle-orm";
 import { ToolCard } from "@/components/tools/tool-card";
+import { EmptyState } from "@/components/empty-state";
 
 export default async function ToolsPage() {
   const user = getCurrentUser();
@@ -51,7 +52,20 @@ export default async function ToolsPage() {
 
       <h2 className="text-sm font-medium text-gray-400 mb-2">自定义工具</h2>
       {dbTools.length === 0 ? (
-        <p className="text-sm text-gray-400 py-4">暂无自定义工具</p>
+        <EmptyState
+          icon={Wrench}
+          title="暂无自定义工具"
+          description="创建一个 API 工具，让 Agent 可以调用你的服务"
+          action={
+            <Link
+              href="/tools/new"
+              className={buttonVariants({ size: "sm" })}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              新建工具
+            </Link>
+          }
+        />
       ) : (
         <div className="grid gap-3">
           {dbTools.map((t) => (

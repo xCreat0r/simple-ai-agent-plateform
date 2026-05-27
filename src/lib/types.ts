@@ -27,3 +27,16 @@ export interface Message {
   toolResult?: unknown;
   createdAt: string;
 }
+
+export interface ToolData {
+  id: string;
+  name: string;
+  description: string;
+  endpoint: string;
+  method: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, { type: string; description: string }>;
+    required: string[];
+  };
+}

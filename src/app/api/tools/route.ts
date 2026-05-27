@@ -1,25 +1,9 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { db } from "@/lib/db";
 import { tools } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { eq, desc } from "drizzle-orm";
-
-const createToolSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().default(""),
-  parameters: z.object({
-    type: z.literal("object"),
-    properties: z.record(z.string(), z.object({
-      type: z.enum(["string", "number", "boolean"]),
-      description: z.string().default(""),
-    })),
-    required: z.array(z.string()).default([]),
-  }),
-  endpoint: z.string().url(),
-  method: z.enum(["GET", "POST"]).default("POST"),
-  headers: z.record(z.string(), z.string()).optional(),
-});
+import { createToolSchema } from "@/lib/validators";
 
 export async function GET() {
   const user = getCurrentUser();

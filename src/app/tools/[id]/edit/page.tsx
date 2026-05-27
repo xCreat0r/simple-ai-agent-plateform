@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { tools } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { ToolForm } from "@/components/tools/tool-form";
+import type { ToolData } from "@/lib/types";
 
 export default async function EditToolPage({
   params,
@@ -20,17 +21,4 @@ export default async function EditToolPage({
       <ToolForm tool={tool as unknown as ToolData} />
     </div>
   );
-}
-
-interface ToolData {
-  id: string;
-  name: string;
-  description: string;
-  endpoint: string;
-  method: string;
-  parameters: {
-    type: "object";
-    properties: Record<string, { type: string; description: string }>;
-    required: string[];
-  };
 }
