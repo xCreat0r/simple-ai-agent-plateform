@@ -5,7 +5,7 @@ let client: OpenAI | null = null;
 function getClient() {
   if (!client) {
     client = new OpenAI({
-      apiKey: process.env.DASHSCOPE_API_KEY!,
+      apiKey: process.env.BAILIAN_API_KEY!,
       baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     });
   }

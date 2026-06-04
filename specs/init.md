@@ -52,6 +52,7 @@ name
 prompt
 model
 enabled tools
+knowledge bases
 
 Do NOT implement:
 
@@ -100,6 +101,22 @@ workflow engine
 
 
 --------------------------------
+Feature 5: Knowledge Base (RAG)
+-------------------------------
+
+User can:
+
+- upload documents (txt, md, pdf)
+- view chunked content
+- bind knowledge bases to agents
+
+Do NOT implement:
+
+- semantic search beyond vector similarity
+- document-level permissions
+- multi-format conversion
+
+-------------------------------
 Out of Scope
 --------------------------------
 
@@ -110,6 +127,5 @@ payment
 team
 workflow
 memory
-RAG
 multi-agent
 subscription

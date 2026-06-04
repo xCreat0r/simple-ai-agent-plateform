@@ -9,6 +9,7 @@
 - **对话历史** — 自动保存会话，支持多轮对话上下文与历史回溯
 - **工具调用** — Agent 可自动调用内置工具（网页搜索、网络请求）或自定义 HTTP API
 - **自定义工具** — 可视化参数编辑器，无需手写 JSON Schema
+- **知识库 (RAG)** — 上传文档（TXT/Markdown/PDF）、自动分块、向量检索、Agent 绑定知识库
 - **单用户 MVP** — 零配置认证，开箱即用
 
 ## Tech Stack
@@ -22,6 +23,7 @@
 | ORM | Drizzle ORM |
 | AI SDK | OpenAI SDK (DeepSeek 兼容) |
 | Streaming | ReadableStream SSE |
+| Embedding | 阿里云 DashScope (text-embedding-v3) |
 | Validation | Zod 4 |
 
 ## Quick Start
@@ -82,20 +84,25 @@ src/
 │   │   ├── page.tsx                # 工具列表
 │   │   ├── new/page.tsx            # 创建工具
 │   │   └── [id]/edit/page.tsx      # 编辑工具
+│   ├── knowledge/
+│   │   ├── page.tsx                # 知识库列表
+│   │   ├── new/page.tsx            # 创建知识库
+│   │   └── [id]/page.tsx           # 知识库详情 + 文档管理
 │   └── api/
 │       ├── agents/                 # Agent CRUD
 │       ├── chat/                   # 流式对话
 │       ├── chats/                  # 对话管理
-│       └── tools/                  # 工具 CRUD
+│       ├── tools/                  # 工具 CRUD
+│       └── knowledge/              # 知识库 CRUD + 文档上传/分块/嵌入
 ├── components/
 │   ├── ui/                         # shadcn/ui 组件
 │   ├── agents/                     # Agent 列表卡片、表单、工具选择器
 │   ├── chat/                       # 消息列表、输入框
 │   └── tools/                      # 工具卡片、表单
 └── lib/
-    ├── db/schema/                  # Drizzle Schema (users, agents, agent_tools, chats, messages, tools)
+    ├── db/schema/                  # Drizzle Schema (8 张表)
     ├── tools/                      # 内置工具 + 注册表 + DB 查询
-    ├── ai/provider.ts              # DeepSeek Client
+    ├── ai/                         # AI 能力 (Provider / Embedding / Chunker / Retriever)
     └── auth.ts                     # Auth stub (预留)
 ```
 
@@ -136,6 +143,19 @@ src/
 | `PUT` | `/api/tools/:id` | 更新工具 |
 | `DELETE` | `/api/tools/:id` | 删除工具（清理关联引用） |
 
+### Knowledge Bases
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/knowledge` | 获取知识库列表 |
+| `POST` | `/api/knowledge` | 创建知识库 |
+| `GET` | `/api/knowledge/:id` | 获取知识库详情（含文档列表） |
+| `DELETE` | `/api/knowledge/:id` | 删除知识库 |
+| `GET` | `/api/knowledge/:id/documents` | 获取文档列表 |
+| `POST` | `/api/knowledge/:id/documents` | 上传文档（自动分块 + 嵌入） |
+| `GET` | `/api/knowledge/:id/documents/:docId/content` | 查看文档内容 |
+| `DELETE` | `/api/knowledge/:id/documents/:docId` | 删除文档
+
 ## Environment Variables
 
 ```bash
@@ -145,6 +165,8 @@ DATABASE_URL=postgres://...         # PostgreSQL 连接字符串
 
 # 可选
 DEEPSEEK_BASE_URL=https://api.deepseek.com/v1  # DeepSeek API 地址
+SERPAPI_API_KEY=your-serpapi-key                # 网页搜索（SerpAPI）
+DASHSCOPE_API_KEY=sk-your-dashscope-key         # 文本嵌入（阿里云 DashScope，知识库功能需要）
 ```
 
 ## Deployment
@@ -174,15 +196,14 @@ docker compose up -d
 ✅ Agent CRUD            ✅ 流式对话
 ✅ 对话历史              ✅ Tool Calling
 ✅ 网页搜索 + 网络请求    ✅ 自定义工具
-```
+✅ 知识库 (RAG)          ✅ 文档上传 + 向量检索
 
 明确不做的功能（后续迭代考虑）：
 
-```
-✗ 多用户 / Auth         ✗ RAG / 知识库
-✗ 多 Agent 编排          ✗ MCP 协议
-✗ 工作流引擎             ✗ 计费 / 统计
-✗ 图片 / 语音            ✗ 模板市场
+✗ 多用户 / Auth         ✗ 多 Agent 编排
+✗ MCP 协议              ✗ 工作流引擎
+✗ 计费 / 统计           ✗ 图片 / 语音
+✗ 模板市场
 ```
 
 ## License

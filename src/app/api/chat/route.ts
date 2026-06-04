@@ -62,38 +62,79 @@ export async function POST(req: Request) {
     .where(eq(messages.chatId, chatId))
     .orderBy(asc(messages.createdAt));
 
-  const conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  let conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
-  if (agent.systemPrompt) {
-    conversationMessages.push({
-      role: "system",
-      content: agent.systemPrompt,
-    });
+  const recentHistory = history.slice(-20);
+  const historyMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  const toolCallIdSet = new Set<string>();
+
+  for (const m of recentHistory) {
+    if (m.role === "user") {
+      historyMessages.push({ role: "user", content: m.content });
+    } else if (m.role === "assistant") {
+      const toolCalls = m.toolCalls as Array<{
+        id: string; type: "function"; function: { name: string; arguments: string };
+      }> | null;
+      if (toolCalls && toolCalls.length > 0) {
+        for (const tc of toolCalls) toolCallIdSet.add(tc.id);
+        historyMessages.push({
+          role: "assistant",
+          content: m.content || "",
+          tool_calls: toolCalls,
+        });
+      } else {
+        historyMessages.push({ role: "assistant", content: m.content || "" });
+      }
+    } else if (m.role === "tool") {
+      const tid = (m.toolResult as Record<string, string>)?.toolCallId ?? "";
+      historyMessages.push({ role: "tool", content: m.content, tool_call_id: tid });
+    }
   }
 
-  for (const m of history.slice(-20)) {
-    if (m.role === "user") {
-      conversationMessages.push({ role: "user", content: m.content });
-    } else if (m.role === "assistant") {
-      const entry: OpenAI.Chat.Completions.ChatCompletionMessageParam = {
-        role: "assistant",
-        content: m.content || "",
-      };
-      if (m.toolCalls) {
-        entry.tool_calls = (m.toolCalls as Array<{
-          id: string;
-          type: "function";
-          function: { name: string; arguments: string };
-        }>);
+  let hasIncompleteSequence = false;
+  for (let i = 0; i < historyMessages.length; i++) {
+    const msg = historyMessages[i] as unknown as Record<string, unknown>;
+    if (msg.role === "assistant" && Array.isArray(msg.tool_calls)) {
+      const callIds = new Set((msg.tool_calls as Array<{ id: string }>).map((t) => t.id));
+      const matched = new Set<string>();
+      for (let j = i + 1; j < historyMessages.length; j++) {
+        const next = historyMessages[j] as unknown as Record<string, unknown>;
+        if (next.role === "tool" && callIds.has(next.tool_call_id as string)) {
+          matched.add(next.tool_call_id as string);
+        } else if (next.role !== "tool") {
+          break;
+        }
       }
-      conversationMessages.push(entry);
-    } else if (m.role === "tool") {
-      conversationMessages.push({
-        role: "tool",
-        content: m.content,
-        tool_call_id: (m.toolResult as Record<string, string>)?.toolCallId ?? "",
-      });
+      if (matched.size !== callIds.size) {
+        hasIncompleteSequence = true;
+        break;
+      }
     }
+  }
+
+  if (hasIncompleteSequence) {
+    console.warn("Skipping malformed tool call history, starting fresh");
+    for (const m of historyMessages) {
+      if (m.role === "user") {
+        conversationMessages.push(m);
+      }
+    }
+  } else {
+    conversationMessages = historyMessages;
+  }
+
+  const styleGuide = "\n\n回复风格：用自然对话语气，不使用 markdown 表格、emoji、列表等结构化格式，像朋友聊天一样说话。";
+
+  if (agent.systemPrompt) {
+    conversationMessages.unshift({
+      role: "system",
+      content: agent.systemPrompt + styleGuide,
+    });
+  } else {
+    conversationMessages.unshift({
+      role: "system",
+      content: "你是一个友好的 AI 助手。" + styleGuide,
+    });
   }
 
   const linkedKbs = await db
@@ -217,22 +258,18 @@ export async function POST(req: Request) {
 
           for (const tc of toolCallsArray) {
             const tool = await getTool(tc.name);
-            if (!tool) continue;
 
-            let args: Record<string, unknown> = {};
-            try {
-              args = JSON.parse(tc.arguments);
-            } catch {}
+            let toolResult: string;
+            if (!tool) {
+              toolResult = `工具 "${tc.name}" 未找到`;
+            } else {
+              let args: Record<string, unknown> = {};
+              try {
+                args = JSON.parse(tc.arguments);
+              } catch {}
 
-            controller.enqueue(
-              encoder.encode(`\n[Tool: ${tc.name}]\n`)
-            );
-
-            const toolResult = await tool.execute(args);
-
-            controller.enqueue(
-              encoder.encode(`[Result: ${toolResult.slice(0, 200)}]\n`)
-            );
+              toolResult = await tool.execute(args);
+            }
 
             await db.insert(messages).values({
               chatId,
