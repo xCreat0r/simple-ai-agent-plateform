@@ -9,9 +9,25 @@ const client = new OpenAI({
   baseURL: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1",
 });
 
+const rateLimitMap = new Map<string, number>();
+
 export async function POST(req: Request) {
   const body = await req.json();
   const { agentId, chatId: existingChatId, content } = body;
+
+  if (!content || typeof content !== "string") {
+    return Response.json({ error: "消息内容不能为空" }, { status: 400 });
+  }
+  if (content.length > 4000) {
+    return Response.json({ error: "消息过长，请限制在 4000 字符内" }, { status: 400 });
+  }
+
+  const now = Date.now();
+  const lastRequest = rateLimitMap.get(agentId);
+  if (lastRequest && now - lastRequest < 1000) {
+    return Response.json({ error: "请求过于频繁，请稍后再试" }, { status: 429 });
+  }
+  rateLimitMap.set(agentId, now);
 
   const [agent] = await db.select().from(agents).where(eq(agents.id, agentId));
   if (!agent) {

@@ -34,6 +34,7 @@ export interface ToolData {
   description: string;
   endpoint: string;
   method: string;
+  headers?: Record<string, string>;
   parameters: {
     type: "object";
     properties: Record<string, { type: string; description: string }>;

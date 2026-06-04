@@ -6,8 +6,10 @@ import { ChatMessages } from "@/components/chat/chat-messages";
 import { ChatInput } from "@/components/chat/chat-input";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Plus, X, MessageCircle } from "lucide-react";
+import { getToolName } from "@/lib/tools";
 
 interface ChatItem {
   id: string;
@@ -28,6 +30,7 @@ export default function AgentChatPage({
 }) {
   const { id: agentId } = use(params);
   const [agentName, setAgentName] = useState("");
+  const [agentInfo, setAgentInfo] = useState<{ model: string; tools: string[] } | null>(null);
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
@@ -40,7 +43,10 @@ export default function AgentChatPage({
   useEffect(() => {
     fetch(`/api/agents/${agentId}`)
       .then((r) => r.json())
-      .then((d) => setAgentName(d.name))
+      .then((d) => {
+        setAgentName(d.name);
+        setAgentInfo({ model: d.model, tools: d.tools || [] });
+      })
       .catch(() => setError("加载 Agent 失败"));
     loadChats();
   }, [agentId]);
@@ -165,6 +171,16 @@ export default function AgentChatPage({
           >
             {agentName || "Agent"}
           </Link>
+          {agentInfo && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              <Badge variant="outline" className="text-xs">{agentInfo.model}</Badge>
+              {agentInfo.tools.map((toolId) => (
+                <Badge key={toolId} variant="secondary" className="text-xs">
+                  {getToolName(toolId)}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
         <div className="p-2 flex-1 overflow-y-auto">
           <button

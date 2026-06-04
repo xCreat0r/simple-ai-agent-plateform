@@ -18,6 +18,11 @@ interface ParamRow {
   required: boolean;
 }
 
+interface HeaderRow {
+  key: string;
+  value: string;
+}
+
 export function ToolForm({ tool }: { tool?: ToolData }) {
   const router = useRouter();
   const isEditing = !!tool;
@@ -26,6 +31,7 @@ export function ToolForm({ tool }: { tool?: ToolData }) {
   const [endpoint, setEndpoint] = useState(tool?.endpoint ?? "");
   const [method, setMethod] = useState(tool?.method ?? "POST");
   const [params, setParams] = useState<ParamRow[]>([]);
+  const [headers, setHeaders] = useState<HeaderRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -41,6 +47,10 @@ export function ToolForm({ tool }: { tool?: ToolData }) {
       );
       setParams(rows);
     }
+    if (tool?.headers) {
+      const h = tool.headers as Record<string, string>;
+      setHeaders(Object.entries(h).map(([key, value]) => ({ key, value })));
+    }
   }, [tool]);
 
   function addParam() {
@@ -53,6 +63,18 @@ export function ToolForm({ tool }: { tool?: ToolData }) {
 
   function updateParam(index: number, field: keyof ParamRow, value: string | boolean) {
     setParams(params.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
+  }
+
+  function addHeader() {
+    setHeaders([...headers, { key: "", value: "" }]);
+  }
+
+  function removeHeader(index: number) {
+    setHeaders(headers.filter((_, i) => i !== index));
+  }
+
+  function updateHeader(index: number, field: keyof HeaderRow, value: string) {
+    setHeaders(headers.map((h, i) => (i === index ? { ...h, [field]: value } : h)));
   }
 
   function buildSchema() {
@@ -70,13 +92,23 @@ export function ToolForm({ tool }: { tool?: ToolData }) {
     e.preventDefault();
     setSaving(true);
 
-    const body = {
+    const headerObj: Record<string, string> = {};
+    for (const h of headers) {
+      if (h.key) headerObj[h.key] = h.value;
+    }
+
+    const body: Record<string, unknown> = {
       name,
       description,
       parameters: buildSchema(),
       endpoint,
       method,
     };
+    if (isEditing) {
+      body.headers = Object.keys(headerObj).length > 0 ? headerObj : null;
+    } else if (Object.keys(headerObj).length > 0) {
+      body.headers = headerObj;
+    }
 
     const url = isEditing ? `/api/tools/${tool!.id}` : "/api/tools";
     const httpMethod = isEditing ? "PUT" : "POST";
@@ -125,6 +157,38 @@ export function ToolForm({ tool }: { tool?: ToolData }) {
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>Headers</Label>
+          <Button type="button" variant="ghost" size="sm" onClick={addHeader}>
+            <Plus className="w-3.5 h-3.5 mr-1" />
+            添加
+          </Button>
+        </div>
+        {headers.length === 0 && (
+          <p className="text-sm text-gray-400">无需 Header（如 Authorization）</p>
+        )}
+        {headers.map((h, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <Input
+              placeholder="Key"
+              value={h.key}
+              onChange={(e) => updateHeader(i, "key", e.target.value)}
+              className="flex-1 h-8 text-sm"
+            />
+            <Input
+              placeholder="Value"
+              value={h.value}
+              onChange={(e) => updateHeader(i, "value", e.target.value)}
+              className="flex-1 h-8 text-sm"
+            />
+            <button type="button" onClick={() => removeHeader(i)} className="text-gray-400 hover:text-red-600 shrink-0">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
       </div>
 
       <div className="space-y-2">
