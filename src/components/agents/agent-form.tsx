@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ToolSelector } from "./tool-selector";
+import { KnowledgeSelector } from "./knowledge-selector";
 import type { Agent } from "@/lib/types";
 
 interface AgentFormProps {
-  agent?: Agent & { tools?: string[] };
+  agent?: Agent & { tools?: string[]; knowledgeBaseIds?: string[] };
 }
 
 export function AgentForm({ agent }: AgentFormProps) {
@@ -24,6 +25,7 @@ export function AgentForm({ agent }: AgentFormProps) {
   );
   const [maxTokens, setMaxTokens] = useState(agent?.maxTokens ?? 4096);
   const [tools, setTools] = useState<string[]>(agent?.tools ?? []);
+  const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>(agent?.knowledgeBaseIds ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -31,7 +33,7 @@ export function AgentForm({ agent }: AgentFormProps) {
     e.preventDefault();
     setSaving(true);
 
-    const body = { name, systemPrompt, model: "deepseek-chat", temperature, maxTokens, tools };
+    const body = { name, systemPrompt, model: "deepseek-chat", temperature, maxTokens, tools, knowledgeBaseIds };
     const url = isEditing ? `/api/agents/${agent.id}` : "/api/agents";
     const method = isEditing ? "PUT" : "POST";
 
@@ -102,6 +104,11 @@ export function AgentForm({ agent }: AgentFormProps) {
       <div className="space-y-2">
         <Label>工具</Label>
         <ToolSelector selected={tools} onChange={setTools} />
+      </div>
+
+      <div className="space-y-2">
+        <Label>知识库</Label>
+        <KnowledgeSelector selected={knowledgeBaseIds} onChange={setKnowledgeBaseIds} />
       </div>
 
       {error && (

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { agents, agentTools } from "@/lib/db/schema";
+import { agents, agentTools, agentKnowledge } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 const updateAgentSchema = z.object({
@@ -11,6 +11,7 @@ const updateAgentSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().min(1).optional(),
   tools: z.array(z.string()).optional(),
+  knowledgeBaseIds: z.array(z.string()).optional(),
 });
 
 export async function GET(
@@ -29,9 +30,15 @@ export async function GET(
     .from(agentTools)
     .where(eq(agentTools.agentId, id));
 
+  const kbRows = await db
+    .select()
+    .from(agentKnowledge)
+    .where(eq(agentKnowledge.agentId, id));
+
   return NextResponse.json({
     ...agent,
     tools: toolRows.map((r) => r.toolId),
+    knowledgeBaseIds: kbRows.map((r) => r.kbId),
   });
 }
 
@@ -63,15 +70,30 @@ export async function PUT(
     }
   }
 
+  if (body.knowledgeBaseIds !== undefined) {
+    await db.delete(agentKnowledge).where(eq(agentKnowledge.agentId, id));
+    if (body.knowledgeBaseIds.length > 0) {
+      await db.insert(agentKnowledge).values(
+        body.knowledgeBaseIds.map((kbId) => ({ agentId: id, kbId }))
+      );
+    }
+  }
+
   const [agent] = await db.select().from(agents).where(eq(agents.id, id));
   const toolRows = await db
     .select()
     .from(agentTools)
     .where(eq(agentTools.agentId, id));
 
+  const kbRows = await db
+    .select()
+    .from(agentKnowledge)
+    .where(eq(agentKnowledge.agentId, id));
+
   return NextResponse.json({
     ...agent,
     tools: toolRows.map((r) => r.toolId),
+    knowledgeBaseIds: kbRows.map((r) => r.kbId),
   });
 }
 

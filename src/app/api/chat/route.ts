@@ -1,8 +1,9 @@
 import OpenAI from "openai";
 import { db } from "@/lib/db";
-import { agents, agentTools, chats, messages } from "@/lib/db/schema";
+import { agents, agentTools, chats, messages, agentKnowledge } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { getTool } from "@/lib/tools/db-tools";
+import { retrieveContext } from "@/lib/ai/retriever";
 
 const client = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY!,
@@ -92,6 +93,28 @@ export async function POST(req: Request) {
         content: m.content,
         tool_call_id: (m.toolResult as Record<string, string>)?.toolCallId ?? "",
       });
+    }
+  }
+
+  const linkedKbs = await db
+    .select({ kbId: agentKnowledge.kbId })
+    .from(agentKnowledge)
+    .where(eq(agentKnowledge.agentId, agentId));
+
+  if (linkedKbs.length > 0) {
+    const allChunks: string[] = [];
+    const userQuery = content;
+    for (const { kbId } of linkedKbs) {
+      const chunks = await retrieveContext(kbId, userQuery, 2);
+      allChunks.push(...chunks);
+    }
+    if (allChunks.length > 0) {
+      const contextBlock = "参考以下知识来回答用户问题：\n\n" + allChunks.join("\n---\n");
+      if (conversationMessages[0]?.role === "system") {
+        conversationMessages[0].content = conversationMessages[0].content + "\n\n" + contextBlock;
+      } else {
+        conversationMessages.unshift({ role: "system", content: contextBlock });
+      }
     }
   }
 

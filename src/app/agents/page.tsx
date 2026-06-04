@@ -5,7 +5,7 @@ import { agents, agentTools } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { eq, desc } from "drizzle-orm";
 import { AgentCard } from "@/components/agents/agent-card";
-import { Plus, Wrench, Bot } from "lucide-react";
+import { Plus, Wrench, Bot, Book } from "lucide-react";
 
 export default async function AgentsPage() {
   const user = getCurrentUser();
@@ -39,6 +39,13 @@ export default async function AgentsPage() {
           >
             <Wrench className="w-3.5 h-3.5" />
             工具
+          </Link>
+          <Link
+            href="/knowledge"
+            className="text-sm text-gray-400 hover:text-gray-600 flex items-center gap-1"
+          >
+            <Book className="w-3.5 h-3.5" />
+            知识库
           </Link>
         </div>
         <Link

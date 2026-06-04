@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { agents, agentTools } from "@/lib/db/schema";
+import { agents, agentTools, agentKnowledge } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { eq, desc } from "drizzle-orm";
 
@@ -12,6 +12,7 @@ const createAgentSchema = z.object({
   temperature: z.number().min(0).max(2).default(0.7),
   maxTokens: z.number().min(1).default(4096),
   tools: z.array(z.string()).default([]),
+  knowledgeBaseIds: z.array(z.string()).default([]),
 });
 
 export async function GET() {
@@ -46,6 +47,15 @@ export async function POST(req: Request) {
       body.tools.map((toolId) => ({
         agentId: agent.id,
         toolId,
+      }))
+    );
+  }
+
+  if (body.knowledgeBaseIds.length > 0) {
+    await db.insert(agentKnowledge).values(
+      body.knowledgeBaseIds.map((kbId) => ({
+        agentId: agent.id,
+        kbId,
       }))
     );
   }
