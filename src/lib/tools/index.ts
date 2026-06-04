@@ -1,22 +1,24 @@
 import type { Tool } from "./types";
-import { webRequestTool } from "./web-request";
-import { searchTool } from "./search";
+import { searchToolDef } from "./search";
+import { webRequestToolDef } from "./web-request";
 
-const builtinTools: Record<string, Tool> = {
-  [webRequestTool.id]: webRequestTool,
-  [searchTool.id]: searchTool,
-};
+const builtinDefs = [searchToolDef, webRequestToolDef];
+
+const builtinToolMap = Object.fromEntries(
+  builtinDefs.map((d) => [d.id, d])
+);
 
 export function getToolName(id: string): string {
-  const builtin = builtinTools[id];
-  if (builtin) return builtin.name;
-  return id.slice(0, 8);
+  return builtinToolMap[id]?.name ?? id.slice(0, 8);
 }
 
 export function getAllBuiltinTools(): Tool[] {
-  return Object.values(builtinTools);
+  return builtinDefs.map((d) => ({
+    ...d,
+    execute: async () => "",
+  }));
 }
 
-export function getBuiltinTool(id: string): Tool | undefined {
-  return builtinTools[id];
+export function getBuiltinDef(id: string) {
+  return builtinToolMap[id];
 }

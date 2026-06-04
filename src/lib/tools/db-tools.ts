@@ -3,11 +3,17 @@ import { db } from "@/lib/db";
 import { tools as toolsTable } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import type { Tool } from "./types";
-import { getBuiltinTool } from "./index";
+import { searchTool } from "./search-execute";
+import { webRequestTool } from "./web-request-execute";
+
+const serverTools: Record<string, Tool> = {
+  [searchTool.id]: searchTool,
+  [webRequestTool.id]: webRequestTool,
+};
 
 export async function getTool(id: string): Promise<Tool | undefined> {
-  const builtin = getBuiltinTool(id);
-  if (builtin) return builtin;
+  const serverTool = serverTools[id];
+  if (serverTool) return serverTool;
 
   const [dbTool] = await db
     .select()
@@ -56,13 +62,13 @@ export async function getToolDefinitions(toolIds: string[]) {
   }> = [];
 
   for (const id of toolIds) {
-    const builtin = getBuiltinTool(id);
-    if (builtin) {
+    const serverTool = serverTools[id];
+    if (serverTool) {
       defs.push({
-        id: builtin.id,
-        name: builtin.name,
-        description: builtin.description,
-        parameters: builtin.parameters,
+        id: serverTool.id,
+        name: serverTool.name,
+        description: serverTool.description,
+        parameters: serverTool.parameters,
       });
       continue;
     }

@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { agents, agentTools } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -21,6 +22,9 @@ export default async function EditAgentPage({
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
+      <Link href={`/agents/${id}`} className="text-sm text-gray-400 hover:text-gray-600 mb-4 inline-block">
+        ← Agent 详情
+      </Link>
       <h1 className="text-lg font-medium mb-6">编辑 Agent</h1>
       <AgentForm
         agent={{
