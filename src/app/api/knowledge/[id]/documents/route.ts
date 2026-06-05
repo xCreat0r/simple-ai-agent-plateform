@@ -6,6 +6,7 @@ import { splitText } from "@/lib/ai/chunker";
 import { generateEmbeddings } from "@/lib/ai/embedding";
 // @ts-ignore pdf-parse v1 has no types
 import pdf from "pdf-parse";
+import { badRequest } from "@/lib/errors";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -55,13 +56,8 @@ export async function POST(
 
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
-  if (!file) {
-    return NextResponse.json({ error: "未选择文件" }, { status: 400 });
-  }
-
-  if (file.size > MAX_FILE_SIZE) {
-    return NextResponse.json({ error: "文件过大，请限制在 10MB 以内" }, { status: 400 });
-  }
+  if (!file) return badRequest("未选择文件");
+  if (file.size > MAX_FILE_SIZE) return badRequest("文件过大，请限制在 10MB 以内");
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const filename = file.name;
@@ -74,9 +70,7 @@ export async function POST(
     text = new TextDecoder().decode(buffer);
   }
 
-  if (!text.trim()) {
-    return NextResponse.json({ error: "文件内容为空" }, { status: 400 });
-  }
+  if (!text.trim()) return badRequest("文件内容为空");
 
   const [doc] = await db
     .insert(knowledgeDocuments)

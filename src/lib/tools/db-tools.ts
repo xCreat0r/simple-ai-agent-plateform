@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { tools as toolsTable } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import type { Tool } from "./types";
+import { toolParametersSchema } from "@/lib/validators";
 import { searchTool } from "./search-execute";
 import { webRequestTool } from "./web-request-execute";
 
@@ -22,11 +23,7 @@ export async function getTool(id: string): Promise<Tool | undefined> {
 
   if (!dbTool) return undefined;
 
-  const params = dbTool.parameters as {
-    type: "object";
-    properties: Record<string, { type: string; description: string }>;
-    required: string[];
-  };
+  const params = toolParametersSchema.parse(dbTool.parameters);
 
   return {
     id: dbTool.id,
@@ -83,7 +80,7 @@ export async function getToolDefinitions(toolIds: string[]) {
         id: dbTool.id,
         name: dbTool.name,
         description: dbTool.description,
-        parameters: dbTool.parameters as unknown,
+        parameters: dbTool.parameters,
       });
     }
   }

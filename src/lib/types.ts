@@ -18,13 +18,24 @@ export interface Chat {
   createdAt: string;
 }
 
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+export interface ToolResult {
+  toolCallId: string;
+  content: string;
+}
+
 export interface Message {
   id: string;
   chatId: string;
   role: "user" | "assistant" | "tool";
   content: string;
-  toolCalls?: unknown;
-  toolResult?: unknown;
+  toolCalls?: ToolCall[] | null;
+  toolResult?: ToolResult | null;
   createdAt: string;
 }
 

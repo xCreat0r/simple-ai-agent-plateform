@@ -2,14 +2,13 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { chats } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { badRequest } from "@/lib/errors";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const agentId = url.searchParams.get("agentId");
 
-  if (!agentId) {
-    return NextResponse.json({ error: "agentId required" }, { status: 400 });
-  }
+  if (!agentId) return badRequest("agentId required");
 
   const rows = await db
     .select()

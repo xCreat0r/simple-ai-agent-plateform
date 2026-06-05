@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+export const toolCallSchema = z.object({
+  id: z.string(),
+  type: z.literal("function"),
+  function: z.object({
+    name: z.string(),
+    arguments: z.string(),
+  }),
+});
+
+export const toolResultSchema = z.object({
+  toolCallId: z.string(),
+  content: z.string(),
+});
+
 export const toolParametersSchema = z.object({
   type: z.literal("object"),
   properties: z.record(

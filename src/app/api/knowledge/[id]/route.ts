@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { knowledgeBases } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { notFound } from "@/lib/errors";
 
 export async function GET(
   _req: Request,
@@ -12,7 +13,7 @@ export async function GET(
     .select()
     .from(knowledgeBases)
     .where(eq(knowledgeBases.id, id));
-  if (!kb) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!kb) return notFound("Not found");
   return NextResponse.json(kb);
 }
 

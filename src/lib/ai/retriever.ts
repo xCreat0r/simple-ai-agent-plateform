@@ -11,7 +11,7 @@ export async function retrieveContext(
   const embedding = await generateEmbedding(query);
   const vectorStr = `[${embedding.join(",")}]`;
 
-  const rows = await db.execute(sql`
+  const rows = await db.execute<{ content: string }>(sql`
     SELECT content
     FROM knowledge_chunks
     WHERE kb_id = ${kbId}
@@ -19,5 +19,5 @@ export async function retrieveContext(
     LIMIT ${topK}
   `);
 
-  return (rows as unknown as { content: string }[]).map((r) => r.content);
+  return rows.map((r) => r.content);
 }

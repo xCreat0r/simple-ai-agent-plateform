@@ -4,6 +4,7 @@ import { tools } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { eq, desc } from "drizzle-orm";
 import { createToolSchema } from "@/lib/validators";
+import { parseBody } from "@/lib/validate";
 
 export async function GET() {
   const user = getCurrentUser();
@@ -18,7 +19,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const user = getCurrentUser();
-  const body = createToolSchema.parse(await req.json());
+  const body = parseBody(await req.json(), createToolSchema);
 
   const [tool] = await db
     .insert(tools)

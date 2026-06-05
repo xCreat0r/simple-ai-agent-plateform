@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { knowledgeBases } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { eq, desc } from "drizzle-orm";
+import { parseBody } from "@/lib/validate";
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -21,7 +22,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const user = getCurrentUser();
-  const body = createSchema.parse(await req.json());
+  const body = parseBody(await req.json(), createSchema);
   const [kb] = await db
     .insert(knowledgeBases)
     .values({ userId: user.id, name: body.name })

@@ -3,6 +3,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { agents, agentTools, agentKnowledge } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { notFound } from "@/lib/errors";
+import { parseBody } from "@/lib/validate";
 
 const updateAgentSchema = z.object({
   name: z.string().min(1).optional(),
@@ -21,9 +23,7 @@ export async function GET(
   const { id } = await params;
 
   const [agent] = await db.select().from(agents).where(eq(agents.id, id));
-  if (!agent) {
-    return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-  }
+  if (!agent) return notFound("Agent not found");
 
   const toolRows = await db
     .select()
@@ -47,7 +47,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const body = updateAgentSchema.parse(await req.json());
+  const body = parseBody(await req.json(), updateAgentSchema);
 
   const updateData: Record<string, unknown> = {};
   if (body.name !== undefined) updateData.name = body.name;

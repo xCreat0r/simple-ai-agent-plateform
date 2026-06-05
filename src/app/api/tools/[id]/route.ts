@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { tools, agentTools } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { updateToolSchema } from "@/lib/validators";
+import { notFound } from "@/lib/errors";
+import { parseBody } from "@/lib/validate";
 
 export async function GET(
   _req: Request,
@@ -10,9 +12,7 @@ export async function GET(
 ) {
   const { id } = await params;
   const [tool] = await db.select().from(tools).where(eq(tools.id, id));
-  if (!tool) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+  if (!tool) return notFound("Not found");
   return NextResponse.json(tool);
 }
 
@@ -21,7 +21,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const body = updateToolSchema.parse(await req.json());
+  const body = parseBody(await req.json(), updateToolSchema);
 
   await db
     .update(tools)

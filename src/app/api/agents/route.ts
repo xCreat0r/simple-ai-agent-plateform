@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { agents, agentTools, agentKnowledge } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { eq, desc } from "drizzle-orm";
+import { parseBody } from "@/lib/validate";
 
 const createAgentSchema = z.object({
   name: z.string().min(1),
@@ -28,7 +29,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const user = getCurrentUser();
-  const body = createAgentSchema.parse(await req.json());
+  const body = parseBody(await req.json(), createAgentSchema);
 
   const [agent] = await db
     .insert(agents)
