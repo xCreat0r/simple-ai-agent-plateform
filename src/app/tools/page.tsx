@@ -10,7 +10,7 @@ import { ToolCard } from "@/components/tools/tool-card";
 import { EmptyState } from "@/components/empty-state";
 
 export default async function ToolsPage() {
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
 
   const dbTools = await db
     .select()

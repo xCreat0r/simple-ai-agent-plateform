@@ -8,7 +8,7 @@ import { AgentCard } from "@/components/agents/agent-card";
 import { Plus, Wrench, Bot, Book } from "lucide-react";
 
 export default async function AgentsPage() {
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   const agentRows = await db
     .select()
     .from(agents)

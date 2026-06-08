@@ -17,7 +17,7 @@ const createAgentSchema = z.object({
 });
 
 export async function GET() {
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   const rows = await db
     .select()
     .from(agents)
@@ -28,7 +28,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   const body = parseBody(await req.json(), createAgentSchema);
 
   const [agent] = await db

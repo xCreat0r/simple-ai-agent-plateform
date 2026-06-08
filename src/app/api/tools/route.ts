@@ -7,7 +7,7 @@ import { createToolSchema } from "@/lib/validators";
 import { parseBody } from "@/lib/validate";
 
 export async function GET() {
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   const rows = await db
     .select()
     .from(tools)
@@ -18,7 +18,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   const body = parseBody(await req.json(), createToolSchema);
 
   const [tool] = await db

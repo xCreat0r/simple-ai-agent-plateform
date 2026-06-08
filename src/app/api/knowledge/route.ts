@@ -11,7 +11,7 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   const rows = await db
     .select()
     .from(knowledgeBases)
@@ -21,7 +21,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   const body = parseBody(await req.json(), createSchema);
   const [kb] = await db
     .insert(knowledgeBases)

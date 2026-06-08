@@ -8,7 +8,7 @@ import { eq, desc } from "drizzle-orm";
 import { EmptyState } from "@/components/empty-state";
 
 export default async function KnowledgePage() {
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   const rows = await db
     .select()
     .from(knowledgeBases)

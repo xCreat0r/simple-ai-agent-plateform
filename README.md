@@ -10,7 +10,7 @@
 - **工具调用** — Agent 可自动调用内置工具（网页搜索、网络请求）或自定义 HTTP API
 - **自定义工具** — 可视化参数编辑器，无需手写 JSON Schema
 - **知识库 (RAG)** — 上传文档（TXT/Markdown/PDF）、自动分块、向量检索、Agent 绑定知识库
-- **单用户 MVP** — 零配置认证，开箱即用
+- **用户认证** — 邮箱 + 密码登录，Better Auth 驱动，适合多人使用
 
 ## Tech Stack
 
@@ -24,6 +24,7 @@
 | AI SDK | OpenAI SDK (DeepSeek 兼容) |
 | Streaming | ReadableStream SSE |
 | Embedding | 阿里云 DashScope (text-embedding-v3) |
+| Auth | Better Auth (邮箱 + 密码) |
 | Validation | Zod 4 |
 
 ## Quick Start
@@ -47,7 +48,8 @@ docker exec pg-agent createdb -U postgres agent_platform
 
 # 2. 配置环境变量
 cp .env.example .env.local
-# 编辑 .env.local，填入 DEEPSEEK_API_KEY
+# 编辑 .env.local，填入所有 API Key
+# 生成 BETTER_AUTH_SECRET: openssl rand -base64 32
 
 # 3. 安装依赖
 npm install
@@ -55,14 +57,17 @@ npm install
 # 4. 推送数据库 Schema
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/agent_platform npm run db:push
 
-# 5. 启动开发服务器
+# 5. 创建管理员用户
+npm run db:seed
+
+# 6. 启动开发服务器
 npm run dev
 # → http://localhost:3000
 ```
 
 ### 首次使用
 
-1. 打开 `http://localhost:3000/agents`
+1. 打开 `http://localhost:3000/login`，用管理员账号登录
 2. 点击「新建」创建第一个 Agent：填写名称、系统提示词，勾选需要的工具
 3. 点击 Agent 进入聊天页面，发送消息开始对话
 
@@ -89,11 +94,13 @@ src/
 │   │   ├── new/page.tsx            # 创建知识库
 │   │   └── [id]/page.tsx           # 知识库详情 + 文档管理
 │   └── api/
-│       ├── agents/                 # Agent CRUD
+│   ├── login/                      # 登录页
+│   ├── agents/                 # Agent CRUD
 │       ├── chat/                   # 流式对话
 │       ├── chats/                  # 对话管理
 │       ├── tools/                  # 工具 CRUD
-│       └── knowledge/              # 知识库 CRUD + 文档上传/分块/嵌入
+│       ├── knowledge/              # 知识库 CRUD + 文档上传/分块/嵌入
+│       └── auth/[...all]/          # Better Auth 回调路由
 ├── components/
 │   ├── ui/                         # shadcn/ui 组件
 │   ├── agents/                     # Agent 列表卡片、表单、工具选择器
@@ -103,7 +110,7 @@ src/
     ├── db/schema/                  # Drizzle Schema (8 张表)
     ├── tools/                      # 内置工具 + 注册表 + DB 查询
     ├── ai/                         # AI 能力 (Provider / Embedding / Chunker / Retriever)
-    └── auth.ts                     # Auth stub (预留)
+    └── auth.ts                     # Better Auth 配置 + getCurrentUser
 ```
 
 ## API Reference
@@ -159,14 +166,18 @@ src/
 ## Environment Variables
 
 ```bash
-# 必填
-DEEPSEEK_API_KEY=sk-your-key       # DeepSeek API Key
-DATABASE_URL=postgres://...         # PostgreSQL 连接字符串
+# 数据库
+DATABASE_URL=postgres://...                       # PostgreSQL 连接字符串
 
-# 可选
-DEEPSEEK_BASE_URL=https://api.deepseek.com/v1  # DeepSeek API 地址
-SERPAPI_API_KEY=your-serpapi-key                # 网页搜索（SerpAPI）
-DASHSCOPE_API_KEY=sk-your-dashscope-key         # 文本嵌入（阿里云 DashScope，知识库功能需要）
+# AI 服务
+DEEPSEEK_API_KEY=sk-your-key                      # DeepSeek API Key
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1      # DeepSeek API 地址
+SERPAPI_API_KEY=your-serpapi-key                   # 网页搜索（SerpAPI）
+DASHSCOPE_API_KEY=sk-your-dashscope-key            # 文本嵌入（知识库功能需要）
+
+# Auth（必填）
+BETTER_AUTH_SECRET=                                # openssl rand -base64 32 生成
+BETTER_AUTH_URL=http://localhost:3000               # 应用 URL
 ```
 
 ## Deployment
@@ -177,9 +188,13 @@ DASHSCOPE_API_KEY=sk-your-dashscope-key         # 文本嵌入（阿里云 DashS
 # 1. 部署到 Vercel
 vercel deploy
 
-# 2. 设置环境变量
-# DATABASE_URL → Neon 提供的连接字符串
+# 2. 在 Neon 创建免费 PostgreSQL 数据库（含 pgvector）
+# 3. 设置环境变量
+# DATABASE_URL → Neon 提供的连接字符串（注意 sslmode=require）
 # DEEPSEEK_API_KEY → 你的 API Key
+# BETTER_AUTH_SECRET → 随机密钥
+# BETTER_AUTH_URL → https://your-app.vercel.app
+# 4. 推送 Schema 并创建管理员账户
 ```
 
 ### Docker
@@ -197,13 +212,13 @@ docker compose up -d
 ✅ 对话历史              ✅ Tool Calling
 ✅ 网页搜索 + 网络请求    ✅ 自定义工具
 ✅ 知识库 (RAG)          ✅ 文档上传 + 向量检索
+✅ 用户认证 (Better Auth) ✅ 多用户数据隔离
 
 明确不做的功能（后续迭代考虑）：
 
-✗ 多用户 / Auth         ✗ 多 Agent 编排
-✗ MCP 协议              ✗ 工作流引擎
-✗ 计费 / 统计           ✗ 图片 / 语音
-✗ 模板市场
+✗ 多 Agent 编排          ✗ MCP 协议
+✗ 工作流引擎             ✗ 计费 / 统计
+✗ 图片 / 语音            ✗ 模板市场
 ```
 
 ## License

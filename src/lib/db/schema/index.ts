@@ -5,3 +5,4 @@ export { chats } from "./chats";
 export { messages } from "./messages";
 export { tools } from "./tools";
 export { knowledgeBases, knowledgeDocuments, knowledgeChunks, agentKnowledge } from "./knowledge";
+export { sessions, accounts, verifications } from "./auth";
