@@ -8,7 +8,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plus, X, MessageCircle } from "lucide-react";
+import { Plus, X, MessageCircle, RefreshCw } from "lucide-react";
 import { getToolName } from "@/lib/tools";
 
 interface ChatItem {
@@ -159,6 +159,67 @@ export default function AgentChatPage({
     abortRef.current?.abort();
   }
 
+  async function handleRegenerate() {
+    if (loading || !chatIdRef.current) return;
+
+    setMessages((prev) => {
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (prev[i].role === "user") return prev.slice(0, i + 1);
+      }
+      return prev;
+    });
+
+    setLoading(true);
+    setError("");
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentId,
+          chatId: chatIdRef.current,
+          regenerate: true,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) throw new Error("请求失败");
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No stream");
+
+      const decoder = new TextDecoder();
+      const assistantId = Date.now().toString() + "-a";
+      let assistantContent = "";
+
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: "assistant", content: "" },
+      ]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        assistantContent += decoder.decode(value, { stream: true });
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, content: assistantContent } : m
+          )
+        );
+      }
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return;
+      setError("请求失败，请重试");
+    } finally {
+      setLoading(false);
+      abortRef.current = null;
+    }
+  }
+
   const showEmpty = !chatId && messages.length === 0;
 
   return (
@@ -231,6 +292,17 @@ export default function AgentChatPage({
           />
         ) : (
           <ChatMessages messages={messages} loading={loading} />
+        )}
+        {!showEmpty && !loading && (
+          <div className="px-4 py-1 flex justify-end">
+            <button
+              onClick={handleRegenerate}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+            >
+              <RefreshCw className="w-3 h-3" />
+              重新生成
+            </button>
+          </div>
         )}
         {error && (
           <div className="px-4 py-2">

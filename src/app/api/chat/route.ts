@@ -1,23 +1,31 @@
 import { db } from "@/lib/db";
 import { agents, agentTools, chats, messages } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
 import { getTool } from "@/lib/tools/db-tools";
 import { badRequest, notFound, tooManyRequests } from "@/lib/errors";
 import { buildConversationMessages } from "@/lib/chat/build-context";
 import { injectKnowledgeContext } from "@/lib/chat/retrieve";
 import { runToolLoop } from "@/lib/chat/tool-loop";
+import { checkQuota } from "@/lib/quota";
+import { openai } from "@/lib/ai/provider";
 
 const rateLimitMap = new Map<string, number>();
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { agentId, chatId: existingChatId, content } = body;
+  const { agentId, chatId: existingChatId, content, regenerate } = body;
 
-  if (!content || typeof content !== "string") {
-    return badRequest("消息内容不能为空");
-  }
-  if (content.length > 4000) {
-    return badRequest("消息过长，请限制在 4000 字符内");
+  if (!regenerate) {
+    if (!content || typeof content !== "string") {
+      return badRequest("消息内容不能为空");
+    }
+    if (content.length > 4000) {
+      return badRequest("消息过长，请限制在 4000 字符内");
+    }
+  } else {
+    if (!existingChatId) {
+      return badRequest("重新生成需要指定对话");
+    }
   }
 
   const now = Date.now();
@@ -32,6 +40,11 @@ export async function POST(req: Request) {
     return notFound("Agent not found");
   }
 
+  const quota = await checkQuota(agent.userId);
+  if (!quota.allowed) {
+    return tooManyRequests(quota.reason || "配额已用完");
+  }
+
   const toolRows = await db
     .select()
     .from(agentTools)
@@ -39,26 +52,51 @@ export async function POST(req: Request) {
   const enabledToolIds = toolRows.map((r) => r.toolId);
 
   let chatId = existingChatId;
+  const isNewChat = !chatId;
   if (!chatId) {
     const [chat] = await db
       .insert(chats)
-      .values({ agentId, title: content.slice(0, 50) || "新对话" })
+      .values({ agentId, title: content?.slice(0, 50) || "新对话" })
       .returning();
     chatId = chat.id;
   }
 
-  await db.insert(messages).values({
-    chatId,
-    role: "user",
-    content,
-  });
+  if (regenerate) {
+    const [lastUserMsg] = await db
+      .select({ createdAt: messages.createdAt })
+      .from(messages)
+      .where(and(eq(messages.chatId, chatId), eq(messages.role, "user")))
+      .orderBy(desc(messages.createdAt))
+      .limit(1);
+
+    if (lastUserMsg) {
+      await db
+        .delete(messages)
+        .where(
+          and(
+            eq(messages.chatId, chatId),
+            inArray(messages.role, ["assistant", "tool"]),
+            gt(messages.createdAt, lastUserMsg.createdAt)
+          )
+        );
+    }
+  } else {
+    await db.insert(messages).values({
+      chatId,
+      role: "user",
+      content,
+    });
+  }
 
   const conversationMessages = await buildConversationMessages(
     chatId,
     agent.systemPrompt
   );
 
-  await injectKnowledgeContext(conversationMessages, agentId, content);
+  const userQuery = regenerate
+    ? (conversationMessages.filter((m) => m.role === "user").pop() as { content: string } | undefined)?.content || ""
+    : content;
+  await injectKnowledgeContext(conversationMessages, agentId, userQuery);
 
   const enabledTools = await Promise.all(enabledToolIds.map((id) => getTool(id)));
   const toolDefs = enabledTools
@@ -79,7 +117,36 @@ export async function POST(req: Request) {
         model: agent.model,
         temperature: parseFloat(agent.temperature),
         maxTokens: agent.maxTokens,
-      }).then(() => controller.close()).catch((err) => controller.error(err));
+      }).then(async () => {
+        controller.close();
+
+        if (isNewChat) {
+          try {
+            const [assistantMsg] = await db
+              .select({ content: messages.content })
+              .from(messages)
+              .where(and(eq(messages.chatId, chatId), eq(messages.role, "assistant")))
+              .orderBy(asc(messages.createdAt))
+              .limit(1);
+
+            if (assistantMsg?.content) {
+              const titleRes = await openai.chat.completions.create({
+                model: agent.model,
+                messages: [
+                  { role: "system", content: "根据对话内容生成一个10字以内的简短中文标题，只返回标题文本。" },
+                  { role: "user", content: `用户：${userQuery}\nAI：${assistantMsg.content.slice(0, 300)}` },
+                ],
+                max_tokens: 20,
+                temperature: 0.3,
+              });
+              const title = titleRes.choices[0]?.message?.content?.trim()?.replace(/[""「」『』]/g, "");
+              if (title) {
+                await db.update(chats).set({ title }).where(eq(chats.id, chatId));
+              }
+            }
+          } catch {}
+        }
+      }).catch((err) => controller.error(err));
     },
   });
 

@@ -103,6 +103,8 @@ export async function runToolLoop(
       for (const tc of toolCallsArray) {
         const tool = await getTool(tc.name);
 
+        controller.enqueue(encoder.encode(`\n\n> 🔍 正在调用 ${tc.name}...\n\n`));
+
         let toolResult: string;
         if (!tool) {
           toolResult = `工具 "${tc.name}" 未找到`;
@@ -114,6 +116,8 @@ export async function runToolLoop(
 
           toolResult = await tool.execute(args);
         }
+
+        controller.enqueue(encoder.encode(`> ✅ ${tc.name} 完成\n\n`));
 
         await db.insert(messagesTable).values({
           chatId,
