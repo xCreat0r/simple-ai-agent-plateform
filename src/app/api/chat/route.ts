@@ -1,13 +1,13 @@
 import { db } from "@/lib/db";
 import { agents, agentTools, chats, messages } from "@/lib/db/schema";
-import { and, asc, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, inArray } from "drizzle-orm";
 import { getTool } from "@/lib/tools/db-tools";
 import { badRequest, notFound, tooManyRequests } from "@/lib/errors";
 import { buildConversationMessages } from "@/lib/chat/build-context";
 import { injectKnowledgeContext } from "@/lib/chat/retrieve";
 import { runToolLoop } from "@/lib/chat/tool-loop";
 import { checkQuota } from "@/lib/quota";
-import { openai } from "@/lib/ai/provider";
+import { generateChatTitle } from "@/lib/chat/generate-title";
 
 const rateLimitMap = new Map<string, number>();
 
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
   );
 
   const userQuery = regenerate
-    ? (conversationMessages.filter((m) => m.role === "user").pop() as { content: string } | undefined)?.content || ""
+    ? (conversationMessages.filter((m) => m.role === "user").at(-1) as { content: string } | undefined)?.content || ""
     : content;
   await injectKnowledgeContext(conversationMessages, agentId, userQuery);
 
@@ -121,30 +121,7 @@ export async function POST(req: Request) {
         controller.close();
 
         if (isNewChat) {
-          try {
-            const [assistantMsg] = await db
-              .select({ content: messages.content })
-              .from(messages)
-              .where(and(eq(messages.chatId, chatId), eq(messages.role, "assistant")))
-              .orderBy(asc(messages.createdAt))
-              .limit(1);
-
-            if (assistantMsg?.content) {
-              const titleRes = await openai.chat.completions.create({
-                model: agent.model,
-                messages: [
-                  { role: "system", content: "根据对话内容生成一个10字以内的简短中文标题，只返回标题文本。" },
-                  { role: "user", content: `用户：${userQuery}\nAI：${assistantMsg.content.slice(0, 300)}` },
-                ],
-                max_tokens: 20,
-                temperature: 0.3,
-              });
-              const title = titleRes.choices[0]?.message?.content?.trim()?.replace(/[""「」『』]/g, "");
-              if (title) {
-                await db.update(chats).set({ title }).where(eq(chats.id, chatId));
-              }
-            }
-          } catch {}
+          await generateChatTitle(chatId, agent.id, agent.model, userQuery);
         }
       }).catch((err) => controller.error(err));
     },

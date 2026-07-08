@@ -15,17 +15,7 @@ export const searchTool: Tool = {
     const url = `https://serpapi.com/search?q=${query}&api_key=${apiKey}&engine=google`;
 
     const proxy = process.env.SERPAPI_PROXY;
-    let res: Response;
-    if (proxy) {
-      process.env.HTTPS_PROXY = proxy;
-      try {
-        res = await fetch(url);
-      } finally {
-        delete process.env.HTTPS_PROXY;
-      }
-    } else {
-      res = await fetch(url);
-    }
+    const res = proxy ? await fetchWithProxy(url, proxy) : await fetch(url);
     const data = await res.json();
 
     const results = (data.organic_results as Array<{
@@ -44,3 +34,13 @@ export const searchTool: Tool = {
       .join("\n\n");
   },
 };
+
+async function fetchWithProxy(url: string, proxyUrl: string): Promise<Response> {
+  const { ProxyAgent } = await import("undici");
+  const agent = new ProxyAgent(proxyUrl);
+  try {
+    return await fetch(url, { dispatcher: agent } as never);
+  } finally {
+    agent.close();
+  }
+}

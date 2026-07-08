@@ -21,6 +21,8 @@ export async function getCurrentUser(): Promise<{ id: string; name: string | nul
     if (session) {
       return { id: session.user.id, name: session.user.name };
     }
-  } catch {}
+  } catch (e) {
+    console.warn("getCurrentUser: 无法获取 session, 降级为 guest", e);
+  }
   return { id: GUEST_USER_ID, name: "Guest" };
 }

@@ -42,25 +42,7 @@ export async function buildConversationMessages(
     }
   }
 
-  let hasIncompleteSequence = false;
-  for (let i = 0; i < historyMessages.length; i++) {
-    const msg = historyMessages[i];
-    if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
-      const callIds = new Set(msg.tool_calls.map((t) => t.id));
-      const matched = new Set<string>();
-      for (let j = i + 1; j < historyMessages.length; j++) {
-        const next = historyMessages[j];
-        if (next.role !== "tool") break;
-        if (callIds.has(next.tool_call_id)) {
-          matched.add(next.tool_call_id);
-        }
-      }
-      if (matched.size !== callIds.size) {
-        hasIncompleteSequence = true;
-        break;
-      }
-    }
-  }
+  const hasIncompleteSequence = detectIncompleteToolSequence(historyMessages);
 
   let conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
 
@@ -86,4 +68,25 @@ export async function buildConversationMessages(
   }
 
   return conversationMessages;
+}
+
+function detectIncompleteToolSequence(
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+): boolean {
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
+      const callIds = new Set(msg.tool_calls.map((t) => t.id));
+      const matched = new Set<string>();
+      for (let j = i + 1; j < messages.length; j++) {
+        const next = messages[j];
+        if (next.role !== "tool") break;
+        if (callIds.has(next.tool_call_id)) {
+          matched.add(next.tool_call_id);
+        }
+      }
+      if (matched.size !== callIds.size) return true;
+    }
+  }
+  return false;
 }

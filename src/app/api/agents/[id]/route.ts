@@ -1,20 +1,10 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { db } from "@/lib/db";
 import { agents, agentTools, agentKnowledge } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { notFound } from "@/lib/errors";
 import { parseBody } from "@/lib/validate";
-
-const updateAgentSchema = z.object({
-  name: z.string().min(1).optional(),
-  systemPrompt: z.string().optional(),
-  model: z.string().optional(),
-  temperature: z.number().min(0).max(2).optional(),
-  maxTokens: z.number().min(1).optional(),
-  tools: z.array(z.string()).optional(),
-  knowledgeBaseIds: z.array(z.string()).optional(),
-});
+import { updateAgentSchema } from "@/lib/validators";
 
 export async function GET(
   _req: Request,

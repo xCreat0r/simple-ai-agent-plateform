@@ -43,3 +43,23 @@ export const updateToolSchema = z.object({
   method: z.enum(["GET", "POST"]).optional(),
   headers: z.record(z.string(), z.string()).nullable().optional(),
 });
+
+export const createAgentSchema = z.object({
+  name: z.string().min(1),
+  systemPrompt: z.string().default(""),
+  model: z.string().default("deepseek-chat"),
+  temperature: z.number().min(0).max(2).default(0.7),
+  maxTokens: z.number().min(1).default(4096),
+  tools: z.array(z.string()).default([]),
+  knowledgeBaseIds: z.array(z.string()).default([]),
+});
+
+export const updateAgentSchema = z.object({
+  name: z.string().min(1).optional(),
+  systemPrompt: z.string().optional(),
+  model: z.string().optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().min(1).optional(),
+  tools: z.array(z.string()).optional(),
+  knowledgeBaseIds: z.array(z.string()).optional(),
+});

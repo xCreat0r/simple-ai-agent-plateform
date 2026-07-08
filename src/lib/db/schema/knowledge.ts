@@ -5,6 +5,7 @@ import {
   timestamp,
   integer,
   vector,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
 import { agents } from "./agents";
@@ -49,4 +50,6 @@ export const agentKnowledge = pgTable("agent_knowledge", {
   kbId: uuid("kb_id")
     .notNull()
     .references(() => knowledgeBases.id, { onDelete: "cascade" }),
-});
+}, (table) => ({
+  pk: primaryKey({ columns: [table.agentId, table.kbId] }),
+}));

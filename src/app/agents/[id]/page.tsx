@@ -7,7 +7,6 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Plus, X, MessageCircle, RefreshCw } from "lucide-react";
 import { getToolName } from "@/lib/tools";
 
@@ -91,8 +90,6 @@ export default function AgentChatPage({
   async function handleSend(text: string) {
     if (loading || !text.trim()) return;
 
-    setLoading(true);
-    setError("");
     const userMsg: MessageItem = {
       id: Date.now().toString(),
       role: "user",
@@ -100,59 +97,11 @@ export default function AgentChatPage({
     };
     setMessages((prev) => [...prev, userMsg]);
 
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agentId,
-          chatId: chatIdRef.current,
-          content: text,
-        }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) throw new Error("请求失败");
-
-      const newChatId = res.headers.get("x-chat-id");
-      if (newChatId && !chatIdRef.current) {
-        chatIdRef.current = newChatId;
-        setChatId(newChatId);
-        loadChats();
-      }
-
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No stream");
-
-      const decoder = new TextDecoder();
-      const assistantId = Date.now().toString() + "-a";
-      let assistantContent = "";
-
-      setMessages((prev) => [
-        ...prev,
-        { id: assistantId, role: "assistant", content: "" },
-      ]);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        assistantContent += decoder.decode(value, { stream: true });
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId ? { ...m, content: assistantContent } : m
-          )
-        );
-      }
-    } catch (err) {
-      if ((err as Error).name === "AbortError") return;
-      setError("请求失败，请重试");
-    } finally {
-      setLoading(false);
-      abortRef.current = null;
-    }
+    await doFetchChat({
+      agentId,
+      chatId: chatIdRef.current,
+      content: text,
+    });
   }
 
   function handleStop() {
@@ -169,6 +118,14 @@ export default function AgentChatPage({
       return prev;
     });
 
+    await doFetchChat({
+      agentId,
+      chatId: chatIdRef.current,
+      regenerate: true,
+    });
+  }
+
+  async function doFetchChat(body: object) {
     setLoading(true);
     setError("");
 
@@ -179,15 +136,18 @@ export default function AgentChatPage({
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agentId,
-          chatId: chatIdRef.current,
-          regenerate: true,
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
 
       if (!res.ok) throw new Error("请求失败");
+
+      const newChatId = res.headers.get("x-chat-id");
+      if (newChatId && !chatIdRef.current) {
+        chatIdRef.current = newChatId;
+        setChatId(newChatId);
+        loadChats();
+      }
 
       const reader = res.body?.getReader();
       if (!reader) throw new Error("No stream");
