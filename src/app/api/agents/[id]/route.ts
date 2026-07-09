@@ -1,18 +1,23 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { agents, agentTools, agentKnowledge } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { notFound } from "@/lib/errors";
 import { parseBody } from "@/lib/validate";
 import { updateAgentSchema } from "@/lib/validators";
+import { requireUser } from "@/lib/auth";
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const user = await requireUser();
 
-  const [agent] = await db.select().from(agents).where(eq(agents.id, id));
+  const [agent] = await db
+    .select()
+    .from(agents)
+    .where(and(eq(agents.id, id), eq(agents.userId, user.id)));
   if (!agent) return notFound("Agent not found");
 
   const toolRows = await db
@@ -37,7 +42,14 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const user = await requireUser();
   const body = parseBody(await req.json(), updateAgentSchema);
+
+  const [agent] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(and(eq(agents.id, id), eq(agents.userId, user.id)));
+  if (!agent) return notFound("Agent not found");
 
   const updateData: Record<string, unknown> = {};
   if (body.name !== undefined) updateData.name = body.name;
@@ -69,7 +81,7 @@ export async function PUT(
     }
   }
 
-  const [agent] = await db.select().from(agents).where(eq(agents.id, id));
+  const [updated] = await db.select().from(agents).where(eq(agents.id, id));
   const toolRows = await db
     .select()
     .from(agentTools)
@@ -81,7 +93,7 @@ export async function PUT(
     .where(eq(agentKnowledge.agentId, id));
 
   return NextResponse.json({
-    ...agent,
+    ...updated,
     tools: toolRows.map((r) => r.toolId),
     knowledgeBaseIds: kbRows.map((r) => r.kbId),
   });
@@ -92,6 +104,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const user = await requireUser();
+
+  const [agent] = await db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(and(eq(agents.id, id), eq(agents.userId, user.id)));
+  if (!agent) return notFound("Agent not found");
+
   await db.delete(agents).where(eq(agents.id, id));
   return NextResponse.json({ ok: true });
 }

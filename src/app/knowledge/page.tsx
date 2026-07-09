@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { Plus, Book } from "lucide-react";
 import { db } from "@/lib/db";
@@ -9,6 +10,7 @@ import { EmptyState } from "@/components/empty-state";
 
 export default async function KnowledgePage() {
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
   const rows = await db
     .select()
     .from(knowledgeBases)

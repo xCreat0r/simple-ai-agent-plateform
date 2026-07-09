@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { agents, agentTools, agentKnowledge } from "@/lib/db/schema";
-import { getCurrentUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { eq, desc } from "drizzle-orm";
 import { parseBody } from "@/lib/validate";
 import { createAgentSchema } from "@/lib/validators";
 
 export async function GET() {
-  const user = await getCurrentUser();
+  const user = await requireUser();
   const rows = await db
     .select()
     .from(agents)
@@ -18,7 +18,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const user = await getCurrentUser();
+  const user = await requireUser();
   const body = parseBody(await req.json(), createAgentSchema);
 
   const [agent] = await db

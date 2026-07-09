@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "db:push": "drizzle-kit push",
+    "db:init": "tsx --env-file=.env.local scripts/db-init.ts",
+    "db:index": "tsx --env-file=.env.local scripts/create-index.ts",
     "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio"

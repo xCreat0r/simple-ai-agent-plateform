@@ -1,6 +1,23 @@
 import { db } from "@/lib/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
+import { notFound } from "@/lib/errors";
+
+export async function assertOwnership(
+  table: Parameters<typeof db.select>[0] extends (...args: infer P) => any ? P[0] : never,
+  idColumn: PgColumn & { name: string },
+  id: string,
+  userIdColumn: PgColumn & { name: string },
+  userId: string
+): Promise<Record<string, unknown>> {
+  const [row] = await db
+    .select()
+    .from(table as never)
+    .where(and(eq(idColumn, id), eq(userIdColumn, userId)));
+
+  if (!row) throw notFound("资源不存在");
+  return row as Record<string, unknown>;
+}
 
 export async function findById(
   table: Parameters<typeof db.select>[0] extends (...args: infer P) => any ? P[0] : never,

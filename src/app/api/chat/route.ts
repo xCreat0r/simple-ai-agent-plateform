@@ -8,6 +8,7 @@ import { injectKnowledgeContext } from "@/lib/chat/retrieve";
 import { runToolLoop } from "@/lib/chat/tool-loop";
 import { checkQuota } from "@/lib/quota";
 import { generateChatTitle } from "@/lib/chat/generate-title";
+import { requireUser } from "@/lib/auth";
 
 const rateLimitMap = new Map<string, number>();
 
@@ -35,7 +36,12 @@ export async function POST(req: Request) {
   }
   rateLimitMap.set(agentId, now);
 
-  const [agent] = await db.select().from(agents).where(eq(agents.id, agentId));
+  const user = await requireUser();
+
+  const [agent] = await db
+    .select()
+    .from(agents)
+    .where(and(eq(agents.id, agentId), eq(agents.userId, user.id)));
   if (!agent) {
     return notFound("Agent not found");
   }

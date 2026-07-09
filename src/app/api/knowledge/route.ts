@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { knowledgeBases } from "@/lib/db/schema";
-import { getCurrentUser } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import { eq, desc } from "drizzle-orm";
 import { parseBody } from "@/lib/validate";
 
@@ -11,7 +11,7 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  const user = await getCurrentUser();
+  const user = await requireUser();
   const rows = await db
     .select()
     .from(knowledgeBases)
@@ -21,7 +21,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const user = await getCurrentUser();
+  const user = await requireUser();
   const body = parseBody(await req.json(), createSchema);
   const [kb] = await db
     .insert(knowledgeBases)

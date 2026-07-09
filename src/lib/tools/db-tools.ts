@@ -4,6 +4,7 @@ import { tools as toolsTable } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import type { Tool } from "./types";
 import { toolParametersSchema } from "@/lib/validators";
+import { validateExternalUrl } from "./url-guard";
 import { searchTool } from "./search-execute";
 import { webRequestTool } from "./web-request-execute";
 
@@ -31,6 +32,7 @@ export async function getTool(id: string): Promise<Tool | undefined> {
     description: dbTool.description,
     parameters: params,
     async execute(args) {
+      validateExternalUrl(dbTool.endpoint);
       const headers = dbTool.headers as Record<string, string> | undefined;
       const url = dbTool.method === "GET"
         ? `${dbTool.endpoint}?${new URLSearchParams(args as Record<string, string>)}`

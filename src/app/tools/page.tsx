@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { Plus, Wrench } from "lucide-react";
 import { db } from "@/lib/db";
@@ -11,6 +12,7 @@ import { EmptyState } from "@/components/empty-state";
 
 export default async function ToolsPage() {
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
 
   const dbTools = await db
     .select()

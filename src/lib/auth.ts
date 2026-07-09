@@ -1,6 +1,7 @@
-import { betterAuth } from "better-auth";
+import { betterAuth } from "better-auth/minimal";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@/lib/db";
+import { unauthorized } from "@/lib/errors";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg" }),
@@ -12,17 +13,19 @@ export const auth = betterAuth({
   advanced: { database: { generateId: false } },
 });
 
-export const GUEST_USER_ID = "00000000-0000-0000-0000-000000000001";
-
-export async function getCurrentUser(): Promise<{ id: string; name: string | null }> {
+export async function getCurrentUser(): Promise<{ id: string; name: string | null } | null> {
   try {
     const { headers } = await import("next/headers");
     const session = await auth.api.getSession({ headers: await headers() });
-    if (session) {
-      return { id: session.user.id, name: session.user.name };
-    }
+    if (session) return { id: session.user.id, name: session.user.name };
   } catch (e) {
-    console.warn("getCurrentUser: 无法获取 session, 降级为 guest", e);
+    console.warn("getCurrentUser: session 获取失败", e);
   }
-  return { id: GUEST_USER_ID, name: "Guest" };
+  return null;
+}
+
+export async function requireUser(): Promise<{ id: string; name: string | null }> {
+  const user = await getCurrentUser();
+  if (!user) throw unauthorized();
+  return user;
 }

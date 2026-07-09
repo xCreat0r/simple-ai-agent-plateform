@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { agents, agentTools } from "@/lib/db/schema";
@@ -9,6 +10,7 @@ import { Plus, Wrench, Bot, Book } from "lucide-react";
 
 export default async function AgentsPage() {
   const user = await getCurrentUser();
+  if (!user) redirect("/login");
   const agentRows = await db
     .select()
     .from(agents)

@@ -54,13 +54,19 @@ cp .env.example .env.local
 # 3. 安装依赖
 npm install
 
+# 3. 初始化数据库扩展
+npm run db:init
+
 # 4. 推送数据库 Schema
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/agent_platform npm run db:push
 
-# 5. 创建管理员用户
+# 5. 创建 HNSW 索引
+npm run db:index
+
+# 6. 创建管理员用户
 npm run db:seed
 
-# 6. 启动开发服务器
+# 7. 启动开发服务器
 npm run dev
 # → http://localhost:3000
 ```
@@ -173,7 +179,7 @@ DATABASE_URL=postgres://...                       # PostgreSQL 连接字符串
 DEEPSEEK_API_KEY=sk-your-key                      # DeepSeek API Key
 DEEPSEEK_BASE_URL=https://api.deepseek.com/v1      # DeepSeek API 地址
 SERPAPI_API_KEY=your-serpapi-key                   # 网页搜索（SerpAPI）
-DASHSCOPE_API_KEY=sk-your-dashscope-key            # 文本嵌入（知识库功能需要）
+BAILIAN_API_KEY=sk-your-bailian-key                 # 文本嵌入（阿里云 DashScope，知识库功能需要）
 
 # Auth（必填）
 BETTER_AUTH_SECRET=                                # openssl rand -base64 32 生成
@@ -199,9 +205,7 @@ vercel deploy
 
 ### Docker
 
-```bash
-docker compose up -d
-```
+使用第一步的 `docker run` 启动 PostgreSQL 即可，无需 `docker-compose`。
 
 ## MVP Scope
 

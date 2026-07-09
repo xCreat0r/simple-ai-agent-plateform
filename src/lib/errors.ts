@@ -4,6 +4,10 @@ export function badRequest(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 });
 }
 
+export function unauthorized(msg = "未登录") {
+  return NextResponse.json({ error: msg }, { status: 401 });
+}
+
 export function notFound(msg: string) {
   return NextResponse.json({ error: msg }, { status: 404 });
 }

@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const publicPaths = ["/login", "/signup", "/api/auth", "/"];
+const publicPaths = ["/login", "/signup", "/api/auth"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (publicPaths.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next();
-  }
+  const isPublic = pathname === "/" || publicPaths.some((p) => pathname.startsWith(p));
+  if (isPublic) return NextResponse.next();
 
   const sessionToken = request.cookies.get("better-auth.session_token")?.value;
   if (!sessionToken) {

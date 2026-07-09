@@ -1,20 +1,28 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { knowledgeDocuments, knowledgeChunks } from "@/lib/db/schema";
-import { eq, asc, sql } from "drizzle-orm";
+import { knowledgeBases, knowledgeDocuments, knowledgeChunks } from "@/lib/db/schema";
+import { and, eq, asc, inArray, sql } from "drizzle-orm";
 import { splitText } from "@/lib/ai/chunker";
 import { generateEmbeddings } from "@/lib/ai/embedding";
 // @ts-ignore pdf-parse v1 has no types
 import pdf from "pdf-parse";
-import { badRequest } from "@/lib/errors";
+import { badRequest, notFound } from "@/lib/errors";
+import { requireUser } from "@/lib/auth";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const user = await requireUser();
+
+  const [kb] = await db
+    .select({ id: knowledgeBases.id })
+    .from(knowledgeBases)
+    .where(and(eq(knowledgeBases.id, id), eq(knowledgeBases.userId, user.id)));
+  if (!kb) return notFound("Not found");
 
   const docs = await db
     .select({
@@ -34,10 +42,7 @@ export async function GET(
           count: sql<number>`count(*)::int`,
         })
         .from(knowledgeChunks)
-        .where(docIds.length === 1
-          ? eq(knowledgeChunks.docId, docIds[0])
-          : undefined
-        )
+        .where(inArray(knowledgeChunks.docId, docIds))
         .groupBy(knowledgeChunks.docId)
     : [];
 
@@ -53,6 +58,13 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const user = await requireUser();
+
+  const [kb] = await db
+    .select({ id: knowledgeBases.id })
+    .from(knowledgeBases)
+    .where(and(eq(knowledgeBases.id, id), eq(knowledgeBases.userId, user.id)));
+  if (!kb) return notFound("Not found");
 
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
