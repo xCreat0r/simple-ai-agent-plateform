@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState } from "react";
 import { Copy, Check } from "lucide-react";
+import { Markdown } from "./markdown";
 
 interface Message {
   id: string;
@@ -57,7 +58,11 @@ export function ChatMessages({ messages, loading }: { messages: Message[]; loadi
                     : "bg-gray-100 text-gray-900"
               }`}
             >
-              <div className="whitespace-pre-wrap">{m.content}</div>
+              {isUser ? (
+                <div className="whitespace-pre-wrap">{m.content}</div>
+              ) : (
+                <Markdown content={m.content} />
+              )}
               {!isUser && !isTool && m.content && (
                 <button
                   onClick={() => handleCopy(m.id, m.content)}

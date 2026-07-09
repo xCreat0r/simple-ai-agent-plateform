@@ -53,7 +53,7 @@ export async function buildConversationMessages(
     conversationMessages = historyMessages;
   }
 
-  const styleGuide = "\n\n回复风格：用自然对话语气，不使用 markdown 表格、emoji、列表等结构化格式，像朋友聊天一样说话。";
+  const styleGuide = "\n\n回复风格：用自然对话语气。可以使用代码块、列表、加粗、表格组织内容，但不要使用 emoji。";
 
   if (systemPrompt) {
     conversationMessages.unshift({
