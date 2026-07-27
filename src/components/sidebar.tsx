@@ -57,7 +57,7 @@ export function Sidebar() {
               await authClient.signOut();
               window.location.href = "/login";
             }}
-            className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none z-50 flex items-center gap-1 hover:bg-red-700"
+            className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 flex items-center gap-1 hover:bg-red-700"
           >
             <LogOut className="w-3 h-3" />
             退出
