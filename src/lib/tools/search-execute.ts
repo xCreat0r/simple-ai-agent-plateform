@@ -1,5 +1,6 @@
 import "server-only";
 
+import { lookup } from "dns/promises";
 import type { Tool } from "./types";
 import { searchToolDef } from "./search";
 
@@ -12,10 +13,14 @@ export const searchTool: Tool = {
     }
 
     const query = encodeURIComponent(args.query as string);
-    const url = `https://serpapi.com/search?q=${query}&api_key=${apiKey}&engine=google`;
+    const url = `https://serpapi.com/search?q=${query}&engine=google`;
 
     const proxy = process.env.SERPAPI_PROXY;
-    const res = proxy ? await fetchWithProxy(url, proxy) : await fetch(url);
+    const res = proxy
+      ? await fetchWithProxy(url, apiKey, proxy)
+      : await fetch(url, {
+          headers: { "x-api-key": apiKey },
+        });
     const data = await res.json();
 
     const results = (data.organic_results as Array<{
@@ -35,11 +40,14 @@ export const searchTool: Tool = {
   },
 };
 
-async function fetchWithProxy(url: string, proxyUrl: string): Promise<Response> {
+async function fetchWithProxy(url: string, apiKey: string, proxyUrl: string): Promise<Response> {
   const { ProxyAgent } = await import("undici");
   const agent = new ProxyAgent(proxyUrl);
   try {
-    return await fetch(url, { dispatcher: agent } as never);
+    return await fetch(url, {
+      headers: { "x-api-key": apiKey },
+      dispatcher: agent,
+    } as never);
   } finally {
     agent.close();
   }

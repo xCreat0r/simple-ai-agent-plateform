@@ -1,10 +1,11 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { tools } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { ToolForm } from "@/components/tools/tool-form";
 import type { ToolData } from "@/lib/types";
+import { getCurrentUser } from "@/lib/auth";
 
 export default async function EditToolPage({
   params,
@@ -13,7 +14,13 @@ export default async function EditToolPage({
 }) {
   const { id } = await params;
 
-  const [tool] = await db.select().from(tools).where(eq(tools.id, id));
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const [tool] = await db
+    .select()
+    .from(tools)
+    .where(and(eq(tools.id, id), eq(tools.userId, user.id)));
   if (!tool) notFound();
 
   return (

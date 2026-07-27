@@ -1,9 +1,10 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { agents, agentTools, agentKnowledge } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { AgentForm } from "@/components/agents/agent-form";
+import { getCurrentUser } from "@/lib/auth";
 
 export default async function EditAgentPage({
   params,
@@ -12,7 +13,13 @@ export default async function EditAgentPage({
 }) {
   const { id } = await params;
 
-  const [agent] = await db.select().from(agents).where(eq(agents.id, id));
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+
+  const [agent] = await db
+    .select()
+    .from(agents)
+    .where(and(eq(agents.id, id), eq(agents.userId, user.id)));
   if (!agent) notFound();
 
   const tools = await db

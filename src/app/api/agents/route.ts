@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { agents, agentTools, agentKnowledge } from "@/lib/db/schema";
+import { agents, agentTools, agentKnowledge, tools, knowledgeBases } from "@/lib/db/schema";
 import { requireUser } from "@/lib/auth";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc, inArray } from "drizzle-orm";
 import { parseBody } from "@/lib/validate";
 import { createAgentSchema } from "@/lib/validators";
+import { badRequest } from "@/lib/errors";
 
 export async function GET() {
   const user = await requireUser();
@@ -20,6 +21,26 @@ export async function GET() {
 export async function POST(req: Request) {
   const user = await requireUser();
   const body = parseBody(await req.json(), createAgentSchema);
+
+  if (body.tools.length > 0) {
+    const existingTools = await db
+      .select({ id: tools.id })
+      .from(tools)
+      .where(and(inArray(tools.id, body.tools), eq(tools.userId, user.id)));
+    if (existingTools.length !== body.tools.length) {
+      return badRequest("部分工具不存在或无权访问");
+    }
+  }
+
+  if (body.knowledgeBaseIds.length > 0) {
+    const existingKbs = await db
+      .select({ id: knowledgeBases.id })
+      .from(knowledgeBases)
+      .where(and(inArray(knowledgeBases.id, body.knowledgeBaseIds), eq(knowledgeBases.userId, user.id)));
+    if (existingKbs.length !== body.knowledgeBaseIds.length) {
+      return badRequest("部分知识库不存在或无权访问");
+    }
+  }
 
   const [agent] = await db
     .insert(agents)

@@ -16,3 +16,5 @@ drizzle/
 .DS_Store
 .env.local
 tsconfig.tsbuildinfo
+
+.sentryclirc

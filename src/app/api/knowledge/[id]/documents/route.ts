@@ -11,6 +11,19 @@ import { requireUser } from "@/lib/auth";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+const ALLOWED_EXTENSIONS = new Set([".pdf", ".txt", ".csv", ".json", ".md", ".markdown"]);
+
+const ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "text/plain",
+  "text/csv",
+  "application/json",
+  "text/markdown",
+  "text/x-markdown",
+]);
+
+const PDF_PARSE_TIMEOUT_MS = 30_000;
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -73,11 +86,34 @@ export async function POST(
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const filename = file.name;
+  const mimeType = (file as File & { type?: string }).type;
+
+  const ext = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return badRequest("不支持的文件类型");
+  }
+  if (mimeType && !ALLOWED_MIME_TYPES.has(mimeType)) {
+    return badRequest("不支持的文件类型");
+  }
   let text: string;
 
   if (filename.endsWith(".pdf")) {
-    const data = await pdf(buffer);
+    const data = await Promise.race([
+      pdf(buffer),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("PDF 解析超时")), PDF_PARSE_TIMEOUT_MS)
+      ),
+    ]);
     text = data.text;
+  } else if (filename.endsWith(".csv")) {
+    text = new TextDecoder().decode(buffer);
+  } else if (filename.endsWith(".json")) {
+    const raw = new TextDecoder().decode(buffer);
+    text = JSON.stringify(JSON.parse(raw), null, 2);
+  } else if (filename.endsWith(".md") || filename.endsWith(".markdown")) {
+    text = new TextDecoder().decode(buffer);
+  } else if (filename.endsWith(".txt")) {
+    text = new TextDecoder().decode(buffer);
   } else {
     text = new TextDecoder().decode(buffer);
   }

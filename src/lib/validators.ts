@@ -63,3 +63,8 @@ export const updateAgentSchema = z.object({
   tools: z.array(z.string()).optional(),
   knowledgeBaseIds: z.array(z.string()).optional(),
 });
+
+export const createChatSchema = z.object({
+  agentId: z.string().min(1, "agentId 不能为空"),
+  title: z.string().optional(),
+});

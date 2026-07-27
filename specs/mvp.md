@@ -28,12 +28,6 @@ Need:
 - chat history
 - loading state
 
-Do NOT implement:
-
-- image generation
-- voice
-- multi-user chat
-
 
 --------------------------------
 Feature 2: Agent Config
@@ -54,12 +48,6 @@ model
 enabled tools
 knowledge bases
 
-Do NOT implement:
-
-permissions
-sharing
-templates
-
 
 --------------------------------
 Feature 3: Conversation History
@@ -77,12 +65,6 @@ User can:
 
 view history
 
-Do NOT implement:
-
-search
-folders
-tags
-
 
 --------------------------------
 Feature 4: Tool Calling
@@ -92,12 +74,6 @@ Initial tools:
 
 - web request
 - search
-
-Do NOT implement:
-
-MCP
-plugin marketplace
-workflow engine
 
 
 --------------------------------
@@ -110,19 +86,13 @@ User can:
 - view chunked content
 - bind knowledge bases to agents
 
-Do NOT implement:
 
-- semantic search beyond vector similarity
-- document-level permissions
-- multi-format conversion
-
--------------------------------
+--------------------------------
 Out of Scope
 --------------------------------
 
 No:
 
-auth
 payment
 team
 workflow

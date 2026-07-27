@@ -8,8 +8,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Eye, EyeOff } from "lucide-react";
 import type { ToolData } from "@/lib/types";
+
+const SENSITIVE_HEADERS = new Set([
+  "authorization",
+  "x-api-key",
+  "api-key",
+  "token",
+  "secret",
+  "api-token",
+  "access-token",
+  "bearer",
+]);
+
+function isSensitive(key: string): boolean {
+  return SENSITIVE_HEADERS.has(key.toLowerCase());
+}
 
 interface ParamRow {
   name: string;
@@ -21,6 +36,8 @@ interface ParamRow {
 interface HeaderRow {
   key: string;
   value: string;
+  masked: boolean;
+  originalValue: string;
 }
 
 export function ToolForm({ tool }: { tool?: ToolData }) {
@@ -49,7 +66,14 @@ export function ToolForm({ tool }: { tool?: ToolData }) {
     }
     if (tool?.headers) {
       const h = tool.headers as Record<string, string>;
-      setHeaders(Object.entries(h).map(([key, value]) => ({ key, value })));
+      setHeaders(
+        Object.entries(h).map(([key, value]) => ({
+          key,
+          value: isSensitive(key) ? "" : value,
+          masked: isSensitive(key),
+          originalValue: isSensitive(key) ? value : "",
+        }))
+      );
     }
   }, [tool]);
 
@@ -66,15 +90,28 @@ export function ToolForm({ tool }: { tool?: ToolData }) {
   }
 
   function addHeader() {
-    setHeaders([...headers, { key: "", value: "" }]);
+    setHeaders([...headers, { key: "", value: "", masked: false, originalValue: "" }]);
   }
 
   function removeHeader(index: number) {
     setHeaders(headers.filter((_, i) => i !== index));
   }
 
-  function updateHeader(index: number, field: keyof HeaderRow, value: string) {
+  function updateHeader(index: number, field: keyof HeaderRow, value: string | boolean) {
     setHeaders(headers.map((h, i) => (i === index ? { ...h, [field]: value } : h)));
+  }
+
+  function toggleMask(index: number) {
+    setHeaders(
+      headers.map((h, i) => {
+        if (i !== index) return h;
+        if (h.masked) {
+          return { ...h, masked: false, value: h.originalValue };
+        } else {
+          return { ...h, masked: true, originalValue: h.value, value: "" };
+        }
+      })
+    );
   }
 
   function buildSchema() {
@@ -94,7 +131,7 @@ export function ToolForm({ tool }: { tool?: ToolData }) {
 
     const headerObj: Record<string, string> = {};
     for (const h of headers) {
-      if (h.key) headerObj[h.key] = h.value;
+      if (h.key) headerObj[h.key] = h.masked ? h.originalValue : h.value;
     }
 
     const body: Record<string, unknown> = {
@@ -178,12 +215,29 @@ export function ToolForm({ tool }: { tool?: ToolData }) {
               onChange={(e) => updateHeader(i, "key", e.target.value)}
               className="flex-1 h-8 text-sm"
             />
-            <Input
-              placeholder="Value"
-              value={h.value}
-              onChange={(e) => updateHeader(i, "value", e.target.value)}
-              className="flex-1 h-8 text-sm"
-            />
+            <div className="flex-1 relative">
+              <Input
+                placeholder={isSensitive(h.key) ? "已设置（重新输入将覆盖）" : "Value"}
+                value={h.masked ? "" : h.value}
+                type={h.masked ? "password" : "text"}
+                onChange={(e) => {
+                  updateHeader(i, "value", e.target.value);
+                  if (h.masked && e.target.value) {
+                    updateHeader(i, "masked", false);
+                  }
+                }}
+                className="h-8 text-sm pr-8"
+              />
+              {isSensitive(h.key) && (
+                <button
+                  type="button"
+                  onClick={() => toggleMask(i)}
+                  className="absolute inset-y-0 right-0 px-2 text-gray-400 hover:text-gray-600"
+                >
+                  {h.masked ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                </button>
+              )}
+            </div>
             <button type="button" onClick={() => removeHeader(i)} className="text-gray-400 hover:text-red-600 shrink-0">
               <X className="w-3.5 h-3.5" />
             </button>

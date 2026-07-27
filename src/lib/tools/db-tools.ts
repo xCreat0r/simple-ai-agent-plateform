@@ -4,9 +4,33 @@ import { tools as toolsTable } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import type { Tool } from "./types";
 import { toolParametersSchema } from "@/lib/validators";
-import { validateExternalUrl } from "./url-guard";
+import { validateExternalUrlWithDNS } from "./url-guard";
 import { searchTool } from "./search-execute";
 import { webRequestTool } from "./web-request-execute";
+
+const BLOCKED_HEADERS = new Set([
+  "host",
+  "content-length",
+  "transfer-encoding",
+  "connection",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-real-ip",
+  "cf-connecting-ip",
+  "true-client-ip",
+]);
+
+function sanitizeHeaders(headers: Record<string, string> | undefined): Record<string, string> {
+  if (!headers) return {};
+  const safe: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (!BLOCKED_HEADERS.has(key.toLowerCase())) {
+      safe[key] = value;
+    }
+  }
+  return safe;
+}
 
 const serverTools: Record<string, Tool> = {
   [searchTool.id]: searchTool,
@@ -32,19 +56,24 @@ export async function getTool(id: string): Promise<Tool | undefined> {
     description: dbTool.description,
     parameters: params,
     async execute(args) {
-      validateExternalUrl(dbTool.endpoint);
-      const headers = dbTool.headers as Record<string, string> | undefined;
-      const url = dbTool.method === "GET"
-        ? `${dbTool.endpoint}?${new URLSearchParams(args as Record<string, string>)}`
-        : dbTool.endpoint;
+      await validateExternalUrlWithDNS(dbTool.endpoint);
+      const headers = sanitizeHeaders(dbTool.headers as Record<string, string> | undefined);
+      const endpointUrl = new URL(dbTool.endpoint);
+      if (dbTool.method === "GET") {
+        const searchParams = new URLSearchParams(args as Record<string, string>);
+        for (const [key, value] of searchParams) {
+          endpointUrl.searchParams.set(key, value);
+        }
+      }
 
-      const res = await fetch(url, {
+      const res = await fetch(endpointUrl.toString(), {
         method: dbTool.method,
         headers: {
           "Content-Type": "application/json",
           ...headers,
         },
         body: dbTool.method === "POST" ? JSON.stringify(args) : undefined,
+        redirect: "error",
       });
       const text = await res.text();
       return `状态码: ${res.status}\n${text.slice(0, 2000)}`;

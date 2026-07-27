@@ -9,10 +9,14 @@ import { runToolLoop } from "@/lib/chat/tool-loop";
 import { checkQuota } from "@/lib/quota";
 import { generateChatTitle } from "@/lib/chat/generate-title";
 import { requireUser } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { config } from "@/lib/config";
 
 const rateLimitMap = new Map<string, number>();
 
 export async function POST(req: Request) {
+  const user = await requireUser();
+
   const body = await req.json();
   const { agentId, chatId: existingChatId, content, regenerate } = body;
 
@@ -20,7 +24,7 @@ export async function POST(req: Request) {
     if (!content || typeof content !== "string") {
       return badRequest("消息内容不能为空");
     }
-    if (content.length > 4000) {
+    if (content.length > config.chat.maxContentLength) {
       return badRequest("消息过长，请限制在 4000 字符内");
     }
   } else {
@@ -29,14 +33,14 @@ export async function POST(req: Request) {
     }
   }
 
-  const now = Date.now();
-  const lastRequest = rateLimitMap.get(agentId);
-  if (lastRequest && now - lastRequest < 1000) {
+  const rateLimit = await checkRateLimit(
+    `chat:${user.id}`,
+    config.rateLimit.maxRequestsPerWindow,
+    config.rateLimit.windowMs
+  );
+  if (!rateLimit.allowed) {
     return tooManyRequests("请求过于频繁，请稍后再试");
   }
-  rateLimitMap.set(agentId, now);
-
-  const user = await requireUser();
 
   const [agent] = await db
     .select()
@@ -129,7 +133,11 @@ export async function POST(req: Request) {
         if (isNewChat) {
           await generateChatTitle(chatId, agent.id, agent.model, userQuery);
         }
-      }).catch((err) => controller.error(err));
+      }).catch((err) => {
+        const message = err instanceof Error ? err.message : "未知错误";
+        controller.enqueue(new TextEncoder().encode(`\n\n> ❌ 错误: ${message}\n\n`));
+        controller.error(err);
+      });
     },
   });
 

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { agents, agentTools, agentKnowledge } from "@/lib/db/schema";
-import { and, eq } from "drizzle-orm";
-import { notFound } from "@/lib/errors";
+import { agents, agentTools, agentKnowledge, tools, knowledgeBases } from "@/lib/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
+import { badRequest, notFound } from "@/lib/errors";
 import { parseBody } from "@/lib/validate";
 import { updateAgentSchema } from "@/lib/validators";
 import { requireUser } from "@/lib/auth";
@@ -64,6 +64,15 @@ export async function PUT(
   }
 
   if (body.tools !== undefined) {
+    if (body.tools.length > 0) {
+      const existingTools = await db
+        .select({ id: tools.id })
+        .from(tools)
+        .where(and(inArray(tools.id, body.tools), eq(tools.userId, user.id)));
+      if (existingTools.length !== body.tools.length) {
+        return badRequest("部分工具不存在或无权访问");
+      }
+    }
     await db.delete(agentTools).where(eq(agentTools.agentId, id));
     if (body.tools.length > 0) {
       await db.insert(agentTools).values(
@@ -73,6 +82,15 @@ export async function PUT(
   }
 
   if (body.knowledgeBaseIds !== undefined) {
+    if (body.knowledgeBaseIds.length > 0) {
+      const existingKbs = await db
+        .select({ id: knowledgeBases.id })
+        .from(knowledgeBases)
+        .where(and(inArray(knowledgeBases.id, body.knowledgeBaseIds), eq(knowledgeBases.userId, user.id)));
+      if (existingKbs.length !== body.knowledgeBaseIds.length) {
+        return badRequest("部分知识库不存在或无权访问");
+      }
+    }
     await db.delete(agentKnowledge).where(eq(agentKnowledge.agentId, id));
     if (body.knowledgeBaseIds.length > 0) {
       await db.insert(agentKnowledge).values(

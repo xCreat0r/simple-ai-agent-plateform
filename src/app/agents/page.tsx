@@ -4,7 +4,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { db } from "@/lib/db";
 import { agents, agentTools } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { AgentCard } from "@/components/agents/agent-card";
 import { Plus, Wrench, Bot, Book } from "lucide-react";
 
@@ -17,18 +17,26 @@ export default async function AgentsPage() {
     .where(eq(agents.userId, user.id))
     .orderBy(desc(agents.updatedAt));
 
-  const agentsWithTools = await Promise.all(
-    agentRows.map(async (agent) => {
-      const tools = await db
-        .select()
-        .from(agentTools)
-        .where(eq(agentTools.agentId, agent.id));
-      return {
-        ...agent,
-        tools: tools.map((t) => t.toolId),
-      };
-    })
-  );
+  const agentIds = agentRows.map((a) => a.id);
+  const toolRows =
+    agentIds.length > 0
+      ? await db
+          .select()
+          .from(agentTools)
+          .where(inArray(agentTools.agentId, agentIds))
+      : [];
+
+  const toolsByAgentId = new Map<string, string[]>();
+  for (const row of toolRows) {
+    const list = toolsByAgentId.get(row.agentId) || [];
+    list.push(row.toolId);
+    toolsByAgentId.set(row.agentId, list);
+  }
+
+  const agentsWithTools = agentRows.map((agent) => ({
+    ...agent,
+    tools: toolsByAgentId.get(agent.id) || [],
+  }));
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
