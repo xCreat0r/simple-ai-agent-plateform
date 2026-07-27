@@ -6,7 +6,7 @@ import { agents, agentTools } from "@/lib/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { eq, desc, inArray } from "drizzle-orm";
 import { AgentCard } from "@/components/agents/agent-card";
-import { Plus, Wrench, Bot, Book } from "lucide-react";
+import { Plus, Bot } from "lucide-react";
 
 export default async function AgentsPage() {
   const user = await getCurrentUser();
@@ -41,23 +41,7 @@ export default async function AgentsPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <h1 className="text-lg font-medium">Agent</h1>
-          <Link
-            href="/tools"
-            className="text-sm text-gray-400 hover:text-gray-600 flex items-center gap-1"
-          >
-            <Wrench className="w-3.5 h-3.5" />
-            工具
-          </Link>
-          <Link
-            href="/knowledge"
-            className="text-sm text-gray-400 hover:text-gray-600 flex items-center gap-1"
-          >
-            <Book className="w-3.5 h-3.5" />
-            知识库
-          </Link>
-        </div>
+        <h1 className="text-lg font-medium">Agent</h1>
         <Link
           href="/agents/new"
           className={buttonVariants({ size: "sm" })}

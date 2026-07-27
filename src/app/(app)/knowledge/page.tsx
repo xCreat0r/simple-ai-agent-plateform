@@ -19,9 +19,6 @@ export default async function KnowledgePage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
-      <Link href="/agents" className="text-sm text-gray-400 hover:text-gray-600 mb-4 inline-block">
-        ← Agent 列表
-      </Link>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-lg font-medium">知识库</h1>
         <Link href="/knowledge/new" className={buttonVariants({ size: "sm" })}>
