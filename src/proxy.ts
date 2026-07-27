@@ -5,7 +5,7 @@ const publicPaths = ["/login", "/signup", "/api/auth", "/api/health"];
 
 const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublic = pathname === "/" || publicPaths.some((p) => pathname.startsWith(p));
