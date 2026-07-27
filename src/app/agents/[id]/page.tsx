@@ -22,6 +22,12 @@ interface MessageItem {
   content: string;
 }
 
+interface MessagesResponse {
+  messages: MessageItem[];
+  cursor: string | null;
+  hasMore: boolean;
+}
+
 export default function AgentChatPage({
   params,
 }: {
@@ -33,6 +39,9 @@ export default function AgentChatPage({
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
+  const [messageCursor, setMessageCursor] = useState<string | null>(null);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const abortRef = useRef<AbortController | null>(null);
@@ -63,9 +72,26 @@ export default function AgentChatPage({
     setChatId(id);
     chatIdRef.current = id;
     setError("");
-    const res = await fetch(`/api/chats/${id}/messages`);
-    const data = await res.json();
-    setMessages(data);
+    setMessages([]);
+    setLoadingMore(false);
+    const res = await fetch(`/api/chats/${id}/messages?limit=50`);
+    const data: MessagesResponse = await res.json();
+    setMessages(data.messages);
+    setMessageCursor(data.cursor);
+    setHasMoreMessages(data.hasMore);
+  }
+
+  async function loadMoreMessages() {
+    if (!chatId || loadingMore) return;
+    setLoadingMore(true);
+    const res = await fetch(
+      `/api/chats/${chatId}/messages?limit=50&before=${messageCursor}`
+    );
+    const data: MessagesResponse = await res.json();
+    setMessages((prev) => [...data.messages, ...prev]);
+    setMessageCursor(data.cursor);
+    setHasMoreMessages(data.hasMore);
+    setLoadingMore(false);
   }
 
   async function newChat() {
@@ -244,6 +270,17 @@ export default function AgentChatPage({
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0">
+        {hasMoreMessages && !loading && (
+          <div className="px-4 py-1.5 flex justify-center border-b border-gray-100">
+            <button
+              onClick={loadMoreMessages}
+              disabled={loadingMore}
+              className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
+            >
+              {loadingMore ? "加载中..." : "加载更早消息"}
+            </button>
+          </div>
+        )}
         {showEmpty ? (
           <EmptyState
             icon={MessageCircle}
