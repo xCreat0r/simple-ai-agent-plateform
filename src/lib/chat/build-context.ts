@@ -2,24 +2,25 @@ import "server-only";
 import type OpenAI from "openai";
 import { db } from "@/lib/db";
 import { messages } from "@/lib/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { toolCallSchema, toolResultSchema } from "@/lib/validators";
 
 export async function buildConversationMessages(
   chatId: string,
   systemPrompt: string | null
 ): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[]> {
-  const history = await db
+  const recentHistory = await db
     .select()
     .from(messages)
     .where(eq(messages.chatId, chatId))
-    .orderBy(asc(messages.createdAt));
+    .orderBy(desc(messages.createdAt))
+    .limit(20);
 
-  const recentHistory = history.slice(-20);
+  const history = recentHistory.reverse();
   const historyMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
   const toolCallIdSet = new Set<string>();
 
-  for (const m of recentHistory) {
+  for (const m of history) {
     if (m.role === "user") {
       historyMessages.push({ role: "user", content: m.content });
     } else if (m.role === "assistant") {

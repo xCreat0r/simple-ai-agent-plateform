@@ -30,7 +30,8 @@ export async function GET(
     })
     .from(messages)
     .where(eq(messages.chatId, id))
-    .orderBy(asc(messages.createdAt));
+    .orderBy(asc(messages.createdAt))
+    .limit(50);
 
   return NextResponse.json(rows);
 }
