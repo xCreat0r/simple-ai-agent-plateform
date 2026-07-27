@@ -48,8 +48,8 @@ export function Sidebar() {
       </nav>
 
       {session && (
-        <div className="relative group">
-          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm text-gray-500 cursor-pointer hover:bg-gray-300 transition-colors">
+        <div className="flex flex-col items-center gap-2 pb-1">
+          <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-500">
             {(session.user?.name?.[0] || session.user?.email?.[0] || "?").toUpperCase()}
           </div>
           <button
@@ -57,10 +57,10 @@ export function Sidebar() {
               await authClient.signOut();
               window.location.href = "/login";
             }}
-            className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 flex items-center gap-1 hover:bg-red-700"
+            className="text-gray-400 hover:text-red-600 transition-colors"
+            title="退出"
           >
-            <LogOut className="w-3 h-3" />
-            退出
+            <LogOut className="w-4 h-4" />
           </button>
         </div>
       )}
