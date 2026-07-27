@@ -209,7 +209,7 @@ export default function AgentChatPage({
   const showEmpty = !chatId && messages.length === 0;
 
   return (
-    <div className="h-screen flex">
+    <div className="flex h-full">
       <aside className="w-56 border-r border-gray-200 flex flex-col shrink-0">
         <div className="p-3 border-b border-gray-200">
           <Link

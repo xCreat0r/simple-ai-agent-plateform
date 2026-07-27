@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Header } from "@/components/header";
 
 export const metadata: Metadata = {
   title: "Agent Platform",
@@ -15,7 +14,6 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className="bg-white text-gray-900 antialiased min-h-screen">
-        <Header />
         {children}
       </body>
     </html>
