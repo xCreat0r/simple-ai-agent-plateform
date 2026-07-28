@@ -1,0 +1,94 @@
+import type OpenAI from "openai";
+import { getDb } from "@/lib/db";
+import { messages } from "@/lib/db/schema";
+import { desc, eq } from "drizzle-orm";
+import { toolCallSchema, toolResultSchema } from "@/lib/validators";
+
+export async function buildConversationMessages(
+  chatId: string,
+  systemPrompt: string | null
+): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[]> {
+  const recentHistory = await getDb()
+    .select()
+    .from(messages)
+    .where(eq(messages.chatId, chatId))
+    .orderBy(desc(messages.createdAt))
+    .limit(20);
+
+  const history = recentHistory.reverse();
+  const historyMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  const toolCallIdSet = new Set<string>();
+
+  for (const m of history) {
+    if (m.role === "user") {
+      historyMessages.push({ role: "user", content: m.content });
+    } else if (m.role === "assistant") {
+      const toolCallsData = typeof m.toolCalls === "string" ? JSON.parse(m.toolCalls) : m.toolCalls;
+      const parsed = toolCallSchema.array().nullable().safeParse(toolCallsData);
+      const toolCalls = parsed.success ? parsed.data : null;
+      if (toolCalls && toolCalls.length > 0) {
+        for (const tc of toolCalls) toolCallIdSet.add(tc.id);
+        historyMessages.push({
+          role: "assistant",
+          content: m.content || "",
+          tool_calls: toolCalls,
+        });
+      } else {
+        historyMessages.push({ role: "assistant", content: m.content || "" });
+      }
+    } else if (m.role === "tool") {
+      const toolResultData = typeof m.toolResult === "string" ? JSON.parse(m.toolResult) : m.toolResult;
+      const parsed = toolResultSchema.safeParse(toolResultData);
+      const tid = parsed.success ? parsed.data.toolCallId : "";
+      historyMessages.push({ role: "tool", content: m.content, tool_call_id: tid });
+    }
+  }
+
+  const hasIncompleteSequence = detectIncompleteToolSequence(historyMessages);
+
+  let conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+
+  if (hasIncompleteSequence) {
+    console.warn("Skipping malformed tool call history, starting fresh");
+    conversationMessages = historyMessages.filter((m) => m.role === "user");
+  } else {
+    conversationMessages = historyMessages;
+  }
+
+  const styleGuide = "\n\n回复风格：用自然对话语气。可以使用代码块、列表、加粗、表格组织内容，但不要使用 emoji。";
+
+  if (systemPrompt) {
+    conversationMessages.unshift({
+      role: "system",
+      content: systemPrompt + styleGuide,
+    });
+  } else {
+    conversationMessages.unshift({
+      role: "system",
+      content: "你是一个友好的 AI 助手。" + styleGuide,
+    });
+  }
+
+  return conversationMessages;
+}
+
+function detectIncompleteToolSequence(
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+): boolean {
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
+      const callIds = new Set(msg.tool_calls.map((t) => t.id));
+      const matched = new Set<string>();
+      for (let j = i + 1; j < messages.length; j++) {
+        const next = messages[j];
+        if (next.role !== "tool") break;
+        if (callIds.has(next.tool_call_id)) {
+          matched.add(next.tool_call_id);
+        }
+      }
+      if (matched.size !== callIds.size) return true;
+    }
+  }
+  return false;
+}

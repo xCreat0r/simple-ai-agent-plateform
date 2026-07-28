@@ -1,0 +1,114 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { Tool } from "@/lib/types";
+
+const methodOptions = [
+  { value: "GET", label: "GET" },
+  { value: "POST", label: "POST" },
+];
+
+function safeParseJSON(str: string): Record<string, unknown> {
+  try { return JSON.parse(str); } catch { return {}; }
+}
+
+function safeParseHeaders(str: string): Record<string, string> {
+  try {
+    const obj = JSON.parse(str);
+    const result: Record<string, string> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      result[k] = String(v);
+    }
+    return result;
+  } catch { return {}; }
+}
+
+function ToolForm({ initialData, onSuccess }: { initialData?: Partial<Tool>; onSuccess: () => void }) {
+  const navigate = useNavigate();
+  const [name, setName] = useState(initialData?.name || "");
+  const [description, setDescription] = useState(initialData?.description || "");
+  const [endpoint, setEndpoint] = useState(initialData?.endpoint || "");
+  const [method, setMethod] = useState(initialData?.method || "GET");
+  const [headers, setHeaders] = useState(initialData?.headers ? JSON.stringify(initialData.headers, null, 2) : "{}");
+  const [parameters, setParameters] = useState(initialData?.parameters ? JSON.stringify(initialData.parameters, null, 2) : "{}");
+
+  const createMutation = useMutation({
+      mutationFn: () => api.createTool({ name, description, endpoint, method, headers: safeParseHeaders(headers), parameters: safeParseJSON(parameters) }),
+    onSuccess,
+  });
+
+  const updateMutation = useMutation({
+      mutationFn: () => api.updateTool(initialData!.id!, { name, description, endpoint, method, headers: safeParseHeaders(headers), parameters: safeParseJSON(parameters) }),
+    onSuccess,
+  });
+
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (initialData?.id) updateMutation.mutate();
+    else createMutation.mutate();
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
+      <Card>
+        <CardHeader>
+          <CardTitle>{initialData ? "编辑工具" : "新建工具"}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">名称</Label>
+            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="工具名称" required />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">描述</Label>
+            <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="工具描述" rows={2} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="endpoint">端点 URL</Label>
+            <Input id="endpoint" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="https://api.example.com/endpoint" />
+          </div>
+
+          <div className="space-y-2">
+            <Label>HTTP 方法</Label>
+            <Select value={method} onValueChange={setMethod} items={methodOptions} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="headers">自定义请求头 (JSON)</Label>
+            <Textarea id="headers" value={headers} onChange={(e) => setHeaders(e.target.value)} rows={4} className="font-mono text-xs" />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="parameters">参数 JSON Schema (JSON)</Label>
+            <Textarea id="parameters" value={parameters} onChange={(e) => setParameters(e.target.value)} rows={6} className="font-mono text-xs" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex gap-3">
+        <Button type="submit" disabled={isSubmitting || !name}>
+          {isSubmitting ? "保存中..." : initialData ? "保存更改" : "创建"}
+        </Button>
+        <Button type="button" variant="outline" onClick={() => navigate("/tools")}>取消</Button>
+      </div>
+    </form>
+  );
+}
+
+export function ToolNew() {
+  const navigate = useNavigate();
+  return <ToolForm onSuccess={() => navigate("/tools")} />;
+}
+
+export { ToolForm };

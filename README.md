@@ -1,6 +1,6 @@
 # Simple AI Agent Platform
 
-一个轻量级 AI Agent 管理平台。通过 Web UI 创建、配置 Agent，赋予工具调用能力，与 DeepSeek 模型流式对话。
+轻量级 AI Agent 管理平台。通过 Web UI 创建、配置 Agent，赋予工具调用能力，与 DeepSeek 模型流式对话。
 
 ## Features
 
@@ -16,29 +16,33 @@
 
 | 层级 | 技术 |
 |------|------|
-| Framework | Next.js 16 (App Router) |
-| UI | React 19 + Tailwind CSS 4 + shadcn/ui v4 |
+| Backend | Hono 4.x (Cloudflare Workers) |
+| Frontend | React 19 + Vite 8 + Tailwind CSS 4 + @base-ui/react |
 | Language | TypeScript 6 |
-| Database | PostgreSQL 18 |
+| Database | Cloudflare D1 (SQLite) |
+| Vector DB | Cloudflare Vectorize |
 | ORM | Drizzle ORM |
-| AI SDK | OpenAI SDK (DeepSeek 兼容) |
+| AI SDK | Vercel AI SDK + OpenAI SDK (DeepSeek) |
 | Streaming | ReadableStream SSE |
 | Embedding | 阿里云 DashScope (text-embedding-v3) |
 | Auth | Better Auth (邮箱 + 密码) |
 | Validation | Zod 4 |
+| Cache | Cloudflare KV (限流/配额) |
+| Deploy | Cloudflare Workers + Pages |
 
 ## Quick Start
 
-### Prerequisites
+### 前置条件
 
-- Node.js ≥ 24
-- Docker (for PostgreSQL)
+- Node.js ≥ 22
+- Docker（用于本地 PostgreSQL）
 - DeepSeek API Key ([platform.deepseek.com](https://platform.deepseek.com))
+- Cloudflare 账号（可选，本地开发不需要）
 
-### Setup
+### 数据库
 
 ```bash
-# 1. 启动 PostgreSQL
+# 启动 PostgreSQL（含 pgvector）
 docker run --name pg-agent \
   -e POSTGRES_PASSWORD=postgres \
   -p 5432:5432 \
@@ -46,77 +50,91 @@ docker run --name pg-agent \
 
 docker exec pg-agent createdb -U postgres agent_platform
 
-# 2. 配置环境变量
+# 启用 pgvector
+docker exec pg-agent psql -U postgres -d agent_platform \
+  -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+# 推送 Schema
+cd backend
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/agent_platform \
+  npx drizzle-kit push
+```
+
+### 后端
+
+```bash
+cd backend
 cp .env.example .env.local
-# 编辑 .env.local，填入所有 API Key
-# 生成 BETTER_AUTH_SECRET: openssl rand -base64 32
-
-# 3. 安装依赖
+# 编辑 .env.local，填入 API Key
 npm install
-
-# 3. 初始化数据库扩展
-npm run db:init
-
-# 4. 推送数据库 Schema
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/agent_platform npm run db:push
-
-# 5. 创建 HNSW 索引
-npm run db:index
-
-# 6. 创建管理员用户
-npm run db:seed
-
-# 7. 启动开发服务器
 npm run dev
-# → http://localhost:3000
+# → http://localhost:8787
+```
+
+### 前端
+
+```bash
+cd frontend
+# 如果后端不在本机 8787 端口，创建 frontend/.env.local 并填入：
+# VITE_API_URL=http://localhost:8787
+npm install
+npm run dev
+# → http://localhost:5173
 ```
 
 ### 首次使用
 
-1. 打开 `http://localhost:3000/login`，用管理员账号登录
+1. 打开 `http://localhost:5173/signup` 注册管理员账号
 2. 点击「新建」创建第一个 Agent：填写名称、系统提示词，勾选需要的工具
 3. 点击 Agent 进入聊天页面，发送消息开始对话
 
 ## Project Structure
 
 ```
-src/
-├── app/
-│   ├── page.tsx                    # / → /agents
-│   ├── layout.tsx                  # 根布局
-│   ├── globals.css                 # Tailwind
-│   ├── agents/
-│   │   ├── page.tsx                # Agent 列表
-│   │   ├── new/page.tsx            # 创建 Agent
-│   │   └── [id]/
-│   │       ├── page.tsx            # 聊天页面
-│   │       └── edit/page.tsx       # 编辑 Agent
-│   ├── tools/
-│   │   ├── page.tsx                # 工具列表
-│   │   ├── new/page.tsx            # 创建工具
-│   │   └── [id]/edit/page.tsx      # 编辑工具
-│   ├── knowledge/
-│   │   ├── page.tsx                # 知识库列表
-│   │   ├── new/page.tsx            # 创建知识库
-│   │   └── [id]/page.tsx           # 知识库详情 + 文档管理
-│   └── api/
-│   ├── login/                      # 登录页
-│   ├── agents/                 # Agent CRUD
-│       ├── chat/                   # 流式对话
-│       ├── chats/                  # 对话管理
-│       ├── tools/                  # 工具 CRUD
-│       ├── knowledge/              # 知识库 CRUD + 文档上传/分块/嵌入
-│       └── auth/[...all]/          # Better Auth 回调路由
-├── components/
-│   ├── ui/                         # shadcn/ui 组件
-│   ├── agents/                     # Agent 列表卡片、表单、工具选择器
-│   ├── chat/                       # 消息列表、输入框
-│   └── tools/                      # 工具卡片、表单
-└── lib/
-    ├── db/schema/                  # Drizzle Schema (8 张表)
-    ├── tools/                      # 内置工具 + 注册表 + DB 查询
-    ├── ai/                         # AI 能力 (Provider / Embedding / Chunker / Retriever)
-    └── auth.ts                     # Better Auth 配置 + getCurrentUser
+├── backend/                     # Hono + Cloudflare Workers
+│   ├── src/
+│   │   ├── index.ts             # Hono 应用入口（路由 + CORS + 错误处理）
+│   │   ├── routes/              # API 路由
+│   │   │   ├── _middleware.ts   # requireUser 认证中间件
+│   │   │   ├── agents.ts        # /api/agents CRUD
+│   │   │   ├── auth.ts          # /api/auth (Better Auth)
+│   │   │   ├── chat.ts          # /api/chat 流式对话
+│   │   │   ├── chats.ts         # /api/chats 对话管理
+│   │   │   ├── knowledge.ts     # /api/knowledge 知识库 CRUD
+│   │   │   ├── tools.ts         # /api/tools 工具 CRUD
+│   │   │   └── health.ts        # /api/health 健康检查
+│   │   └── lib/
+│   │       ├── ai/              # AI 能力 (provider / embedding / chunker / retriever)
+│   │       ├── chat/            # 对话逻辑 (build-context / retrieve / tool-loop / generate-title)
+│   │       ├── tools/           # 工具系统 (内置工具 + 自定义工具 + url-guard)
+│   │       ├── db/              # Drizzle ORM (D1 适配) + 13 张表 schema
+│   │       ├── auth.ts          # Better Auth 配置
+│   │       ├── config.ts        # 统一配置
+│   │       ├── env-holder.ts    # Cloudflare 环境持有者
+│   │       ├── errors.ts        # 统一错误响应
+│   │       ├── logger.ts        # 日志
+│   │       ├── quota.ts         # 配额框架
+│   │       ├── rate-limit.ts    # KV 滑动窗口限流
+│   │       ├── validate.ts      # Zod 校验包装
+│   │       └── validators.ts    # Zod Schema
+│   ├── scripts/                 # seed + backup
+│   ├── wrangler.jsonc           # Cloudflare Workers 配置
+│   └── drizzle.config.ts        # Drizzle ORM 配置
+│
+├── frontend/                    # Vite + React 19
+│   ├── src/
+│   │   ├── App.tsx              # 路由 + Auth + QueryClient
+│   │   ├── main.tsx             # React 入口
+│   │   ├── pages/               # 页面组件 (agents / tools / knowledge / login / signup)
+│   │   ├── components/          # UI 组件 (chat / ui / sidebar / empty-state / confirm-dialog)
+│   │   ├── hooks/               # useChat SSE Hook
+│   │   └── lib/                 # api 客户端 / auth 上下文 / types / utils
+│   └── vite.config.ts
+│
+├── docs/                        # 架构 + 部署文档
+├── specs/                       # MVP 规格
+├── AGENTS.md                    # AI 编码代理规则
+└── package.json                 # Monorepo 脚本调度
 ```
 
 ## API Reference
@@ -127,8 +145,8 @@ src/
 |--------|----------|-------------|
 | `GET` | `/api/agents` | 获取 Agent 列表 |
 | `POST` | `/api/agents` | 创建 Agent |
-| `GET` | `/api/agents/:id` | 获取 Agent 详情（含启用的工具） |
-| `PUT` | `/api/agents/:id` | 更新 Agent 配置 |
+| `GET` | `/api/agents/:id` | 获取 Agent 详情（含启用的工具/知识库） |
+| `PUT` | `/api/agents/:id` | 更新 Agent |
 | `DELETE` | `/api/agents/:id` | 删除 Agent |
 
 ### Chat
@@ -143,7 +161,8 @@ src/
 |--------|----------|-------------|
 | `GET` | `/api/chats?agentId=` | 获取对话列表 |
 | `POST` | `/api/chats` | 创建新对话 |
-| `DELETE` | `/api/chats/:id` | 删除对话（级联删除消息） |
+| `PATCH` | `/api/chats/:id` | 重命名对话 |
+| `DELETE` | `/api/chats/:id` | 删除对话 |
 | `GET` | `/api/chats/:id/messages` | 获取消息历史 |
 
 ### Tools
@@ -154,7 +173,7 @@ src/
 | `POST` | `/api/tools` | 创建自定义工具 |
 | `GET` | `/api/tools/:id` | 获取工具详情 |
 | `PUT` | `/api/tools/:id` | 更新工具 |
-| `DELETE` | `/api/tools/:id` | 删除工具（清理关联引用） |
+| `DELETE` | `/api/tools/:id` | 删除工具 |
 
 ### Knowledge Bases
 
@@ -167,49 +186,33 @@ src/
 | `GET` | `/api/knowledge/:id/documents` | 获取文档列表 |
 | `POST` | `/api/knowledge/:id/documents` | 上传文档（自动分块 + 嵌入） |
 | `GET` | `/api/knowledge/:id/documents/:docId/content` | 查看文档内容 |
-| `DELETE` | `/api/knowledge/:id/documents/:docId` | 删除文档
+| `DELETE` | `/api/knowledge/:id/documents/:docId` | 删除文档 |
+
+### Health
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/health` | 健康检查 |
 
 ## Environment Variables
 
 ```bash
-# 数据库
-DATABASE_URL=postgres://...                       # PostgreSQL 连接字符串
-
 # AI 服务
 DEEPSEEK_API_KEY=sk-your-key                      # DeepSeek API Key
 DEEPSEEK_BASE_URL=https://api.deepseek.com/v1      # DeepSeek API 地址
-SERPAPI_API_KEY=your-serpapi-key                   # 网页搜索（SerpAPI）
-BAILIAN_API_KEY=sk-your-bailian-key                 # 文本嵌入（阿里云 DashScope，知识库功能需要）
+SERPAPI_API_KEY=your-serpapi-key                   # 网页搜索（可选）
+BAILIAN_API_KEY=sk-your-bailian-key                 # 文本嵌入（可选）
 
-# Auth（必填）
-BETTER_AUTH_SECRET=                                # openssl rand -base64 32 生成
-BETTER_AUTH_URL=http://localhost:3000               # 应用 URL
+# Auth
+BETTER_AUTH_SECRET=                                # openssl rand -base64 32
+BETTER_AUTH_URL=http://localhost:8787               # 应用 URL
 ```
 
 ## Deployment
 
-### Vercel + Neon
-
-```bash
-# 1. 部署到 Vercel
-vercel deploy
-
-# 2. 在 Neon 创建免费 PostgreSQL 数据库（含 pgvector）
-# 3. 设置环境变量
-# DATABASE_URL → Neon 提供的连接字符串（注意 sslmode=require）
-# DEEPSEEK_API_KEY → 你的 API Key
-# BETTER_AUTH_SECRET → 随机密钥
-# BETTER_AUTH_URL → https://your-app.vercel.app
-# 4. 推送 Schema 并创建管理员账户
-```
-
-### Docker
-
-使用第一步的 `docker run` 启动 PostgreSQL 即可，无需 `docker-compose`。
+参见 [docs/cloudflare-deployment.md](docs/cloudflare-deployment.md)。
 
 ## MVP Scope
-
-当前实现的功能：
 
 ```
 ✅ Agent CRUD            ✅ 流式对话
@@ -219,7 +222,6 @@ vercel deploy
 ✅ 用户认证 (Better Auth) ✅ 多用户数据隔离
 
 明确不做的功能（后续迭代考虑）：
-
 ✗ 多 Agent 编排          ✗ MCP 协议
 ✗ 工作流引擎             ✗ 计费 / 统计
 ✗ 图片 / 语音            ✗ 模板市场
