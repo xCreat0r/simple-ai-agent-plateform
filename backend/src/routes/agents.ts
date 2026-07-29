@@ -5,27 +5,28 @@ import { eq, desc, and, inArray } from "drizzle-orm";
 import { parseBody } from "@/lib/validate";
 import { createAgentSchema, updateAgentSchema } from "@/lib/validators";
 import { generateId } from "@/lib/util/uuid";
-import { requireUser } from "./_middleware";
+import type { Env } from "./_middleware";
 
-const agentsRoutes = new Hono<{ Bindings: CloudflareEnv }>();
+
+const agentsRoutes = new Hono<Env>();
 
 agentsRoutes.get("/", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const rows = await getDb()
     .select()
     .from(agents)
-    .where(eq(agents.userId, user.id))
+    .where(eq(agents.userId, userId))
     .orderBy(desc(agents.updatedAt));
   return c.json(rows);
 });
 
 agentsRoutes.get("/:id", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const id = c.req.param("id");
   const [agent] = await getDb()
     .select()
     .from(agents)
-    .where(and(eq(agents.id, id), eq(agents.userId, user.id)));
+    .where(and(eq(agents.id, id), eq(agents.userId, userId)));
   if (!agent) return c.json({ error: "Not found" }, 404);
 
   const toolRows = await getDb().select().from(agentTools).where(eq(agentTools.agentId, id));
@@ -39,7 +40,7 @@ agentsRoutes.get("/:id", async (c) => {
 });
 
 agentsRoutes.post("/", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const body = parseBody(await c.req.json(), createAgentSchema);
 
   const db = getDb();
@@ -47,7 +48,7 @@ agentsRoutes.post("/", async (c) => {
     const existing = await db
       .select({ id: tools.id })
       .from(tools)
-      .where(and(inArray(tools.id, body.tools), eq(tools.userId, user.id)));
+      .where(and(inArray(tools.id, body.tools), eq(tools.userId, userId)));
     if (existing.length !== body.tools.length) {
       return c.json({ error: "部分工具不存在或无权访问" }, 400);
     }
@@ -56,7 +57,7 @@ agentsRoutes.post("/", async (c) => {
     const existing = await db
       .select({ id: knowledgeBases.id })
       .from(knowledgeBases)
-      .where(and(inArray(knowledgeBases.id, body.knowledgeBaseIds), eq(knowledgeBases.userId, user.id)));
+      .where(and(inArray(knowledgeBases.id, body.knowledgeBaseIds), eq(knowledgeBases.userId, userId)));
     if (existing.length !== body.knowledgeBaseIds.length) {
       return c.json({ error: "部分知识库不存在或无权访问" }, 400);
     }
@@ -65,7 +66,7 @@ agentsRoutes.post("/", async (c) => {
   const agentId = generateId();
   const now = new Date();
   await db.insert(agents).values({
-    id: agentId, userId: user.id, name: body.name,
+    id: agentId, userId: userId, name: body.name,
     systemPrompt: body.systemPrompt, model: body.model,
     temperature: body.temperature, maxTokens: body.maxTokens,
     createdAt: now, updatedAt: now,
@@ -81,7 +82,7 @@ agentsRoutes.post("/", async (c) => {
 });
 
 agentsRoutes.put("/:id", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const id = c.req.param("id");
   const body = parseBody(await c.req.json(), updateAgentSchema);
 
@@ -89,7 +90,7 @@ agentsRoutes.put("/:id", async (c) => {
   const [agent] = await db
     .select({ id: agents.id })
     .from(agents)
-    .where(and(eq(agents.id, id), eq(agents.userId, user.id)));
+    .where(and(eq(agents.id, id), eq(agents.userId, userId)));
   if (!agent) return c.json({ error: "Not found" }, 404);
 
   const updateData: Record<string, unknown> = {};
@@ -122,12 +123,12 @@ agentsRoutes.put("/:id", async (c) => {
 });
 
 agentsRoutes.delete("/:id", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const id = c.req.param("id");
   const [agent] = await getDb()
     .select({ id: agents.id })
     .from(agents)
-    .where(and(eq(agents.id, id), eq(agents.userId, user.id)));
+    .where(and(eq(agents.id, id), eq(agents.userId, userId)));
   if (!agent) return c.json({ error: "Not found" }, 404);
   await getDb().delete(agents).where(eq(agents.id, id));
   return c.json({ ok: true });

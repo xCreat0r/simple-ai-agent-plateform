@@ -1,23 +1,24 @@
 import { Hono } from "hono";
+import type { Env } from "./_middleware";
 import { getDb } from "@/lib/db";
 import { agents, chats, messages } from "@/lib/db/schema";
 import { eq, desc, and, asc, lt } from "drizzle-orm";
 import { parseBody } from "@/lib/validate";
 import { createChatSchema } from "@/lib/validators";
 import { generateId } from "@/lib/util/uuid";
-import { requireUser } from "./_middleware";
 
-const chatsRoutes = new Hono<{ Bindings: CloudflareEnv }>();
+
+const chatsRoutes = new Hono<Env>();
 
 chatsRoutes.get("/", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const agentId = c.req.query("agentId");
   if (!agentId) return c.json({ error: "agentId required" }, 400);
 
   const [agent] = await getDb()
     .select({ id: agents.id })
     .from(agents)
-    .where(and(eq(agents.id, agentId), eq(agents.userId, user.id)));
+    .where(and(eq(agents.id, agentId), eq(agents.userId, userId)));
   if (!agent) return c.json({ error: "Agent not found" }, 404);
 
   const rows = await getDb()
@@ -29,13 +30,13 @@ chatsRoutes.get("/", async (c) => {
 });
 
 chatsRoutes.post("/", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const body = parseBody(await c.req.json(), createChatSchema);
 
   const [agent] = await getDb()
     .select({ id: agents.id })
     .from(agents)
-    .where(and(eq(agents.id, body.agentId), eq(agents.userId, user.id)));
+    .where(and(eq(agents.id, body.agentId), eq(agents.userId, userId)));
   if (!agent) return c.json({ error: "Agent not found" }, 404);
 
   const chatId = generateId();
@@ -47,7 +48,7 @@ chatsRoutes.post("/", async (c) => {
 });
 
 chatsRoutes.patch("/:id", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const id = c.req.param("id");
   const { title } = await c.req.json() as { title?: string };
   if (!title) return c.json({ error: "title required" }, 400);
@@ -56,7 +57,7 @@ chatsRoutes.patch("/:id", async (c) => {
     .select({ id: chats.id })
     .from(chats)
     .innerJoin(agents, eq(chats.agentId, agents.id))
-    .where(and(eq(chats.id, id), eq(agents.userId, user.id)))
+    .where(and(eq(chats.id, id), eq(agents.userId, userId)))
     .limit(1);
   if (!chat) return c.json({ error: "Not found" }, 404);
 
@@ -65,14 +66,14 @@ chatsRoutes.patch("/:id", async (c) => {
 });
 
 chatsRoutes.delete("/:id", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const id = c.req.param("id");
 
   const [chat] = await getDb()
     .select({ id: chats.id })
     .from(chats)
     .innerJoin(agents, eq(chats.agentId, agents.id))
-    .where(and(eq(chats.id, id), eq(agents.userId, user.id)))
+    .where(and(eq(chats.id, id), eq(agents.userId, userId)))
     .limit(1);
   if (!chat) return c.json({ error: "Not found" }, 404);
 
@@ -81,14 +82,14 @@ chatsRoutes.delete("/:id", async (c) => {
 });
 
 chatsRoutes.get("/:id/messages", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const id = c.req.param("id");
 
   const [chat] = await getDb()
     .select({ id: chats.id })
     .from(chats)
     .innerJoin(agents, eq(chats.agentId, agents.id))
-    .where(and(eq(chats.id, id), eq(agents.userId, user.id)))
+    .where(and(eq(chats.id, id), eq(agents.userId, userId)))
     .limit(1);
   if (!chat) return c.json({ error: "Not found" }, 404);
 

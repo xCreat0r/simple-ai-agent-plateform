@@ -1,35 +1,36 @@
 import { Hono } from "hono";
+import type { Env } from "./_middleware";
 import { getDb } from "@/lib/db";
 import { tools, agentTools } from "@/lib/db/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { parseBody } from "@/lib/validate";
 import { createToolSchema, updateToolSchema } from "@/lib/validators";
 import { generateId } from "@/lib/util/uuid";
-import { requireUser } from "./_middleware";
+
 import { getAllBuiltinTools } from "@/lib/tools";
 
-const toolsRoutes = new Hono<{ Bindings: CloudflareEnv }>();
+const toolsRoutes = new Hono<Env>();
 
 toolsRoutes.get("/", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const builtins = getAllBuiltinTools().map((t) => ({
     id: t.id, name: t.name, description: t.description, parameters: t.parameters, builtin: true,
   }));
   const custom = await getDb()
     .select()
     .from(tools)
-    .where(eq(tools.userId, user.id))
+    .where(eq(tools.userId, userId))
     .orderBy(desc(tools.updatedAt));
   return c.json([...builtins, ...custom]);
 });
 
 toolsRoutes.post("/", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const body = parseBody(await c.req.json(), createToolSchema);
   const toolId = generateId();
   const now = new Date();
   await getDb().insert(tools).values({
-    id: toolId, userId: user.id, name: body.name, description: body.description,
+    id: toolId, userId: userId, name: body.name, description: body.description,
     parameters: JSON.stringify(body.parameters), endpoint: body.endpoint,
     method: body.method, headers: body.headers ? JSON.stringify(body.headers) : null,
     createdAt: now, updatedAt: now,
@@ -38,25 +39,25 @@ toolsRoutes.post("/", async (c) => {
 });
 
 toolsRoutes.get("/:id", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const id = c.req.param("id");
   const [tool] = await getDb()
     .select()
     .from(tools)
-    .where(and(eq(tools.id, id), eq(tools.userId, user.id)));
+    .where(and(eq(tools.id, id), eq(tools.userId, userId)));
   if (!tool) return c.json({ error: "Not found" }, 404);
   return c.json(tool);
 });
 
 toolsRoutes.put("/:id", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const id = c.req.param("id");
   const body = parseBody(await c.req.json(), updateToolSchema);
 
   const [tool] = await getDb()
     .select({ id: tools.id })
     .from(tools)
-    .where(and(eq(tools.id, id), eq(tools.userId, user.id)));
+    .where(and(eq(tools.id, id), eq(tools.userId, userId)));
   if (!tool) return c.json({ error: "Not found" }, 404);
 
   const updateData: Record<string, unknown> = { updatedAt: new Date() };
@@ -73,12 +74,12 @@ toolsRoutes.put("/:id", async (c) => {
 });
 
 toolsRoutes.delete("/:id", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const id = c.req.param("id");
   const [tool] = await getDb()
     .select({ id: tools.id })
     .from(tools)
-    .where(and(eq(tools.id, id), eq(tools.userId, user.id)));
+    .where(and(eq(tools.id, id), eq(tools.userId, userId)));
   if (!tool) return c.json({ error: "Not found" }, 404);
   await getDb().delete(agentTools).where(eq(agentTools.toolId, id));
   await getDb().delete(tools).where(eq(tools.id, id));

@@ -7,7 +7,8 @@ import { chatsRoutes } from "./routes/chats";
 import { toolsRoutes } from "./routes/tools";
 import { knowledgeRoutes } from "./routes/knowledge";
 import { healthRoutes } from "./routes/health";
-import { AuthError } from "./routes/_middleware";
+import { AuthError, requireUser } from "./routes/_middleware";
+import type { Env } from "./routes/_middleware";
 
 const app = new Hono<{ Bindings: CloudflareEnv }>();
 
@@ -40,11 +41,16 @@ app.use("*", cors({
 }));
 
 app.route("/api/auth", authRoutes);
-app.route("/api/agents", agentsRoutes);
-app.route("/api/chat", chatRoutes);
-app.route("/api/chats", chatsRoutes);
-app.route("/api/tools", toolsRoutes);
-app.route("/api/knowledge", knowledgeRoutes);
 app.route("/api/health", healthRoutes);
+
+const protectedRoutes = new Hono<Env>()
+  .use("*", requireUser)
+  .route("/agents", agentsRoutes)
+  .route("/chat", chatRoutes)
+  .route("/chats", chatsRoutes)
+  .route("/tools", toolsRoutes)
+  .route("/knowledge", knowledgeRoutes);
+
+app.route("/api", protectedRoutes);
 
 export default app;

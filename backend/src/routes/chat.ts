@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Env } from "./_middleware";
 import { stream } from "hono/streaming";
 import { getDb } from "@/lib/db";
 import { agents, agentTools, chats, messages } from "@/lib/db/schema";
@@ -12,12 +13,12 @@ import { generateChatTitle } from "@/lib/chat/generate-title";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { config } from "@/lib/config";
 import { generateId } from "@/lib/util/uuid";
-import { requireUser } from "./_middleware";
 
-const chatRoutes = new Hono<{ Bindings: CloudflareEnv }>();
+
+const chatRoutes = new Hono<Env>();
 
 chatRoutes.post("/", async (c) => {
-  const user = await requireUser(c);
+  const userId = c.get("userId");
   const { agentId, chatId: existingChatId, content, regenerate } = await c.req.json() as {
     agentId: string; chatId?: string; content?: string; regenerate?: boolean;
   };
@@ -27,7 +28,7 @@ chatRoutes.post("/", async (c) => {
   }
 
   const rateLimit = await checkRateLimit(
-    `chat:${user.id}`, config.rateLimit.maxRequestsPerWindow, config.rateLimit.windowMs
+    `chat:${userId}`, config.rateLimit.maxRequestsPerWindow, config.rateLimit.windowMs
   );
   if (!rateLimit.allowed) return c.json({ error: "请求过于频繁" }, 429);
 
@@ -35,7 +36,7 @@ chatRoutes.post("/", async (c) => {
   const [agent] = await db
     .select()
     .from(agents)
-    .where(and(eq(agents.id, agentId), eq(agents.userId, user.id)));
+    .where(and(eq(agents.id, agentId), eq(agents.userId, userId)));
   if (!agent) return c.json({ error: "Agent not found" }, 404);
 
   const quota = await checkQuota(agent.userId);
