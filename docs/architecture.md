@@ -495,9 +495,7 @@ sequenceDiagram
 | 变量 | 必填 | 说明 |
 |------|:--:|------|
 | `DEEPSEEK_API_KEY` | ✅ | DeepSeek API Key |
-| `BETTER_AUTH_SECRET` | ✅ | Auth 加密密钥 (`openssl rand -base64 32`) |
-| `BETTER_AUTH_URL` | ✅ | 应用 URL |
-| `DEEPSEEK_BASE_URL` | 可选 | DeepSeek API 地址（默认 `https://api.deepseek.com/v1`） |
+| `JWT_SECRET` | ✅ | JWT 签名密钥 (`openssl rand -base64 32`) |
 | `SERPAPI_API_KEY` | 可选 | 网页搜索（不配则工具不可用） |
 | `BAILIAN_API_KEY` | 可选 | 文本嵌入（不配则知识库不可用） |
 

@@ -109,7 +109,7 @@ docker exec pg-agent psql -U postgres -d agent_platform -c "CREATE EXTENSION IF 
 
 # 推送 Schema
 cd backend
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/agent_platform npx drizzle-kit push
+DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/agent_platform npx drizzle-kit push
 ```
 
 ### 2.2 生产（Supabase）
@@ -144,11 +144,11 @@ npx wrangler secret put DEEPSEEK_API_KEY
 npx wrangler secret put DEEPSEEK_BASE_URL
 # 输入: https://api.deepseek.com/v1
 
-npx wrangler secret put BETTER_AUTH_SECRET
+npx wrangler secret put JWT_SECRET
 # 输入: (openssl rand -base64 32 生成的随机字符串)
 
-npx wrangler secret put BETTER_AUTH_URL
-# 输入: https://api.your-domain.com（或 Workers 自带域名）
+npx wrangler secret put VITE_API_URL
+# 输入: 前端部署域名（仅在 Cloudflare Pages 中需要）
 
 npx wrangler secret put SERPAPI_API_KEY
 # 输入: (可选，按需配置)
@@ -257,14 +257,7 @@ CI 流程：
 |------|:--:|------|
 | `DEEPSEEK_API_KEY` | ✅ | DeepSeek API Key |
 | `DEEPSEEK_BASE_URL` | ✅ | `https://api.deepseek.com/v1` |
-| `BETTER_AUTH_SECRET` | ✅ | 随机密钥 (`openssl rand -base64 32`) |
-| `BETTER_AUTH_URL` | ✅ | Worker 域名，如 `https://api.your-domain.com` |
-| `SERPAPI_API_KEY` | 可选 | 网页搜索 |
-
-### 前端 (Pages 环境变量)
-
-| 变量 | 必填 | 说明 |
-|------|:--:|------|
+| `JWT_SECRET` | ✅ | 随机密钥 (`openssl rand -base64 32`) |
 | `VITE_API_URL` | ✅ | 后端 Worker 域名，如 `https://api.your-domain.com` |
 
 ### Cloudflare 绑定 (wrangler.jsonc)

@@ -17,19 +17,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getSession().then((s) => {
-      if (s?.user) setUser({ id: s.user.id, name: s.user.name });
+    api.refresh().then((data) => {
+      if (data?.user) setUser({ id: data.user.id, name: data.user.name });
     }).finally(() => setLoading(false));
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const res = await api.signIn({ email, password }) as { user?: User };
-    if (res?.user) setUser(res.user);
+    const res = await api.signIn({ email, password });
+    if (res?.user) setUser({ id: res.user.id, name: res.user.name });
   };
 
   const signUp = async (email: string, password: string, name: string) => {
-    const res = await api.signUp({ email, password, name }) as { user?: User };
-    if (res?.user) setUser(res.user);
+    const res = await api.signUp({ email, password, name });
+    if (res?.user) setUser({ id: res.user.id, name: res.user.name });
   };
 
   const signOut = async () => {

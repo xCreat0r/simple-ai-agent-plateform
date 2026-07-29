@@ -56,7 +56,7 @@ docker exec pg-agent psql -U postgres -d agent_platform \
 
 # 推送 Schema
 cd backend
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/agent_platform \
+DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/agent_platform \
   npx drizzle-kit push
 ```
 
@@ -204,8 +204,8 @@ SERPAPI_API_KEY=your-serpapi-key                   # 网页搜索（可选）
 BAILIAN_API_KEY=sk-your-bailian-key                 # 文本嵌入（可选）
 
 # Auth
-BETTER_AUTH_SECRET=                                # openssl rand -base64 32
-BETTER_AUTH_URL=http://localhost:8787               # 应用 URL
+JWT_SECRET=                                     # openssl rand -base64 32 生成的签名密钥
+VITE_API_URL=http://localhost:8787               # 前端 API 地址（frontend/.env）
 ```
 
 ## Deployment

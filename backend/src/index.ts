@@ -34,8 +34,9 @@ app.use("*", async (c, next) => {
 app.use("*", cors({
   origin: ["http://localhost:5173", "https://app.agent-platform.com"],
   credentials: true,
-  allowHeaders: ["Content-Type", "Authorization"],
+  allowHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"],
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  maxAge: 86400,
 }));
 
 app.route("/api/auth", authRoutes);

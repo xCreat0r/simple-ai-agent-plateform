@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { getAuth } from "@/lib/auth";
+import { verifyAccessToken } from "@/lib/jwt";
 
 export class AuthError extends Error {
   constructor(msg = "未登录") {
@@ -9,8 +9,14 @@ export class AuthError extends Error {
 }
 
 export async function requireUser(c: Context<{ Bindings: CloudflareEnv }>) {
-  const auth = await getAuth();
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  if (!session) throw new AuthError();
-  return session.user;
+  const auth = c.req.header("Authorization");
+  if (!auth || !auth.startsWith("Bearer ")) throw new AuthError();
+
+  const token = auth.slice(7);
+  try {
+    const { userId } = await verifyAccessToken(token);
+    return { id: userId } as { id: string };
+  } catch {
+    throw new AuthError("登录已过期");
+  }
 }
