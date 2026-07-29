@@ -29,7 +29,7 @@ app.use("*", async (c, next) => {
   const { initDb } = await import("@/lib/db");
   const connectionString = getHyperdriveConnectionString();
   if (connectionString) {
-    initDb(connectionString);
+    await initDb(connectionString);
   }
 
   await next();
