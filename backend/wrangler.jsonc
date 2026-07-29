@@ -10,7 +10,7 @@
     {
       "binding": "HYPERDRIVE",
       "id": "CHANGE_ME",
-      "localConnectionString": "postgres://postgres:YOUR_PASSWORD@localhost:5432/agent_platform"
+      "localConnectionString": "postgres://postgres:postgres@localhost:5432/agent_platform"
     }
   ],
   "kv_namespaces": [

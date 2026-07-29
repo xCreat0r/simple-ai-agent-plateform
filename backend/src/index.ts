@@ -13,6 +13,9 @@ import type { Env } from "./routes/_middleware";
 const app = new Hono<{ Bindings: CloudflareEnv }>();
 
 app.onError((err, c) => {
+  console.error("[ERROR]", err.name, err.message);
+  console.error(err.stack);
+  if ((err as any).cause) console.error("Caused by:", (err as any).cause);
   if (err instanceof AuthError) {
     return c.json({ error: err.message }, 401);
   }
