@@ -1,19 +1,14 @@
 import postgres from "postgres";
 import { hash } from "bcryptjs";
 
-const email = process.env.SEED_EMAIL;
-const password = process.env.SEED_PASSWORD;
-const adminName = process.env.SEED_NAME;
-if (!email || !password || !adminName) {
-  console.error("请在 .env.local 中设置 SEED_EMAIL、SEED_PASSWORD、SEED_NAME");
-  process.exit(1);
+function env(key: string, fallback: string): string {
+  return process.env[key] || fallback;
 }
 
-const dbUrl = process.env.DATABASE_URL;
-if (!dbUrl) {
-  console.error("请在 .env.local 中设置 DATABASE_URL");
-  process.exit(1);
-}
+const email = env("SEED_EMAIL", "admin@example.com");
+const password = env("SEED_PASSWORD", "changeme123");
+const adminName = env("SEED_NAME", "管理员");
+const dbUrl = env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/agent_platform");
 
 const sql = postgres(dbUrl);
 
@@ -43,5 +38,5 @@ async function main() {
 
 main().catch((err) => {
   console.error("创建失败:", err);
-  process.exit(1);
+  throw err;
 });
