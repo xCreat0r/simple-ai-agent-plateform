@@ -1,0 +1,16 @@
+[Unit]
+Description=Base Service
+After=network.target
+
+[Service]
+Type=simple
+User=nobody
+Group=nogroup
+ExecStart=/usr/local/bin/base
+Restart=always
+RestartSec=5
+Environment=PORT=8080
+Environment=SERVICE_TOKEN=
+
+[Install]
+WantedBy=multi-user.target

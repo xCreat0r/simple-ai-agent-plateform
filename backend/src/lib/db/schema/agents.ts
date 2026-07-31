@@ -1,9 +1,9 @@
-import { pgTable, text, timestamp, integer, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, doublePrecision, uuid } from "drizzle-orm/pg-core";
 import { users } from "./users";
 
 export const agents = pgTable("agents", {
-  id: text("id").primaryKey(),
-  userId: text("user_id")
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id")
     .notNull()
     .references(() => users.id),
   name: text("name").notNull(),

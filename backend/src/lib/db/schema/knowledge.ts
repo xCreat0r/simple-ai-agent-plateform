@@ -1,11 +1,11 @@
-import { pgTable, text, timestamp, integer, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, primaryKey, uuid } from "drizzle-orm/pg-core";
 import { vector } from "drizzle-orm/pg-core/columns/vector_extension/vector";
 import { users } from "./users";
 import { agents } from "./agents";
 
 export const knowledgeBases = pgTable("knowledge_bases", {
-  id: text("id").primaryKey(),
-  userId: text("user_id")
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id")
     .notNull()
     .references(() => users.id),
   name: text("name").notNull(),
@@ -13,8 +13,8 @@ export const knowledgeBases = pgTable("knowledge_bases", {
 });
 
 export const knowledgeDocuments = pgTable("knowledge_documents", {
-  id: text("id").primaryKey(),
-  kbId: text("kb_id")
+  id: uuid("id").primaryKey(),
+  kbId: uuid("kb_id")
     .notNull()
     .references(() => knowledgeBases.id, { onDelete: "cascade" }),
   filename: text("filename").notNull(),
@@ -23,11 +23,11 @@ export const knowledgeDocuments = pgTable("knowledge_documents", {
 });
 
 export const knowledgeChunks = pgTable("knowledge_chunks", {
-  id: text("id").primaryKey(),
-  docId: text("doc_id")
+  id: uuid("id").primaryKey(),
+  docId: uuid("doc_id")
     .notNull()
     .references(() => knowledgeDocuments.id, { onDelete: "cascade" }),
-  kbId: text("kb_id")
+  kbId: uuid("kb_id")
     .notNull()
     .references(() => knowledgeBases.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
@@ -39,10 +39,10 @@ export const knowledgeChunks = pgTable("knowledge_chunks", {
 export const agentKnowledge = pgTable(
   "agent_knowledge",
   {
-    agentId: text("agent_id")
+    agentId: uuid("agent_id")
       .notNull()
       .references(() => agents.id, { onDelete: "cascade" }),
-    kbId: text("kb_id")
+    kbId: uuid("kb_id")
       .notNull()
       .references(() => knowledgeBases.id, { onDelete: "cascade" }),
   },

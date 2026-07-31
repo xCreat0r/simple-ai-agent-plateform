@@ -1,0 +1,6 @@
+.idea/
+.gitignore
+.dockerignore
+docker/
+tmp/
+/base

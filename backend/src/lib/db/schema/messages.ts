@@ -1,9 +1,9 @@
-import { pgTable, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, jsonb, uuid } from "drizzle-orm/pg-core";
 import { chats } from "./chats";
 
 export const messages = pgTable("messages", {
-  id: text("id").primaryKey(),
-  chatId: text("chat_id")
+  id: uuid("id").primaryKey(),
+  chatId: uuid("chat_id")
     .notNull()
     .references(() => chats.id, { onDelete: "cascade" }),
   role: text("role").notNull(),

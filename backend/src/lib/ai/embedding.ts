@@ -2,7 +2,7 @@ import { getCloudflareContext } from "@/lib/env-holder";
 
 export async function generateEmbedding(text: string): Promise<number[]> {
   const { env } = getCloudflareContext();
-  const res = await env.AI.run("@cf/baai/bge-large-en-v1.5", {
+  const res = await env.AI.run("@cf/baai/bge-m3", {
     text: [text],
   }) as { data: number[][] };
   return res.data[0];
@@ -11,7 +11,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   try {
     const { env } = getCloudflareContext();
-    const res = await env.AI.run("@cf/baai/bge-large-en-v1.5", {
+    const res = await env.AI.run("@cf/baai/bge-m3", {
       text: texts,
     }) as { data: number[][] };
     return res.data;
