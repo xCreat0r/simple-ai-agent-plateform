@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/jhl/simple-ai-agent-plateform/services/base/internal/docparser"
+
 	"github.com/jhl/simple-ai-agent-plateform/services/base/internal/health"
 )
 
