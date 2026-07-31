@@ -8,7 +8,7 @@
 用户请求
   │
   └── https://your-domain.com:28080 (ECS 安全组放行)
-        └── Docker 容器 (registry.cn-shenzhen.aliyuncs.com/xmaker513/base-service)
+        └── Docker 容器 (crpi-ga7cj49iwn8ptcyv.cn-guangzhou.personal.cr.aliyuncs.com/xmaker513/base-service)
               └── POST /doc-parser/parse — PDF 文本提取
               └── GET  /health           — 健康检查
 ```
@@ -19,7 +19,7 @@
 
 1. **ECS 实例** — 建议 2C4G 及以上（PDF 解析较耗 CPU/内存）
 2. **Docker Engine** — v20.10+（支持多架构镜像拉取）
-3. **镜像已发布** — 通过 GitHub Actions `workflow_dispatch` 构建并推送到阿里云 ACR `registry.cn-shenzhen.aliyuncs.com/xmaker513/base-service`
+3. **镜像已发布** — 通过 GitHub Actions `workflow_dispatch` 构建并推送到阿里云 ACR `crpi-ga7cj49iwn8ptcyv.cn-guangzhou.personal.cr.aliyuncs.com/xmaker513/base-service`
 
 ---
 
@@ -45,7 +45,7 @@ docker version
 镜像存放在阿里云 ACR，中国大陆与海外地域均可直接拉取，无需配置镜像加速器。
 
 ```bash
-docker pull registry.cn-shenzhen.aliyuncs.com/xmaker513/base-service:latest
+docker pull crpi-ga7cj49iwn8ptcyv.cn-guangzhou.personal.cr.aliyuncs.com/xmaker513/base-service:latest
 ```
 
 多架构镜像会自动匹配服务器架构（amd64 / arm64）。
@@ -60,7 +60,7 @@ docker run -d \
   --restart unless-stopped \
   -p 28080:8080 \
   -e PORT=8080 \
-  registry.cn-shenzhen.aliyuncs.com/xmaker513/base-service:latest
+  crpi-ga7cj49iwn8ptcyv.cn-guangzhou.personal.cr.aliyuncs.com/xmaker513/base-service:latest
 ```
 
 | 参数 | 说明 |
@@ -130,7 +130,7 @@ docker rm -f base-service
 
 ```bash
 # 1. 拉取最新镜像
-docker pull registry.cn-shenzhen.aliyuncs.com/xmaker513/base-service:latest
+docker pull crpi-ga7cj49iwn8ptcyv.cn-guangzhou.personal.cr.aliyuncs.com/xmaker513/base-service:latest
 
 # 2. 删除旧容器
 docker rm -f base-service
@@ -141,7 +141,7 @@ docker run -d \
   --restart unless-stopped \
   -p 28080:8080 \
   -e PORT=8080 \
-  registry.cn-shenzhen.aliyuncs.com/xmaker513/base-service:latest
+  crpi-ga7cj49iwn8ptcyv.cn-guangzhou.personal.cr.aliyuncs.com/xmaker513/base-service:latest
 ```
 
 ---
