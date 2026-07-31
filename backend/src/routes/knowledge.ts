@@ -6,6 +6,7 @@ import { eq, desc, and, asc, inArray, sql } from "drizzle-orm";
 import { splitText } from "@/lib/ai/chunker";
 import { generateEmbeddings } from "@/lib/ai/embedding";
 import { generateId } from "@/lib/util/uuid";
+import { getCloudflareContext } from "@/lib/env-holder";
 
 
 const knowledgeRoutes = new Hono<Env>();
@@ -99,12 +100,14 @@ knowledgeRoutes.post("/:id/documents", async (c) => {
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
   if (file.size > MAX_FILE_SIZE) return c.json({ error: "文件过大" }, 400);
 
-  const ALLOWED = new Set([".txt", ".csv", ".json", ".md", ".markdown"]);
+  const ALLOWED = new Set([".pdf", ".txt", ".csv", ".json", ".md", ".markdown"]);
   const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
   if (!ALLOWED.has(ext)) return c.json({ error: "不支持的文件类型" }, 400);
 
   const arrBuf = await file.arrayBuffer();
-  const text = new TextDecoder().decode(arrBuf);
+  const text = ext === ".pdf"
+    ? await parsePdf(arrBuf)
+    : new TextDecoder().decode(arrBuf);
 
   if (!text.trim()) return c.json({ error: "文件内容为空" }, 400);
 
@@ -155,5 +158,21 @@ knowledgeRoutes.get("/:id/documents/:docId/content", async (c) => {
   if (!doc) return c.json({ error: "Not found" }, 404);
   return c.json({ content: doc.content });
 });
+
+async function parsePdf(arrBuf: ArrayBuffer): Promise<string> {
+  const { env } = getCloudflareContext();
+  const baseUrl = env.BASE_SERVICE_URL;
+  if (!baseUrl) throw new Error("未配置 BASE_SERVICE_URL");
+
+  const res = await fetch(`${baseUrl}/doc-parser/parse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/pdf" },
+    body: arrBuf,
+  });
+  if (!res.ok) {
+    throw new Error(`PDF 解析服务返回 ${res.status}: ${await res.text()}`);
+  }
+  return await res.text();
+}
 
 export { knowledgeRoutes };

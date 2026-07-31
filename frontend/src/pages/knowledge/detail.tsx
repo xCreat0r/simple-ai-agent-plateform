@@ -41,22 +41,7 @@ export function KnowledgeDetail() {
     if (!file) return;
     setUploading(true);
     try {
-      let uploadFile = file;
-      const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
-      if (ext === ".pdf") {
-        const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist");
-        GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.2.108/build/pdf.worker.min.mjs";
-        const arrBuf = await file.arrayBuffer();
-        const doc = await getDocument({ data: new Uint8Array(arrBuf) }).promise;
-        const parts: string[] = [];
-        for (let i = 1; i <= doc.numPages; i++) {
-          const page = await doc.getPage(i);
-          const tc = await page.getTextContent();
-          parts.push(tc.items.map((item: any) => item.str || "").join(" "));
-        }
-        uploadFile = new File([parts.join("\n")], file.name, { type: "text/plain" });
-      }
-      await api.uploadDocument(kbId!, uploadFile);
+      await api.uploadDocument(kbId!, file);
       queryClient.invalidateQueries({ queryKey: ["documents", kbId] });
     } catch (err) {
       console.error("Upload failed:", err);
