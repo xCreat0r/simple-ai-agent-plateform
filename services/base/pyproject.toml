@@ -1,0 +1,13 @@
+[project]
+name = "base-service"
+version = "0.1.0"
+description = "PDF 文本提取服务（PyMuPDF 文字层提取）"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pymupdf>=1.24",
+]
+
+[tool.uv]
+package = false

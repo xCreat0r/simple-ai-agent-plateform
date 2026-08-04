@@ -1,2 +1,5 @@
-/base
-/tmp
+.venv/
+__pycache__/
+*.pyc
+.idea/
+tmp/

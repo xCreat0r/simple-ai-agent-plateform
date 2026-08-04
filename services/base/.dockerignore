@@ -1,6 +1,7 @@
+.git/
 .idea/
-.gitignore
-.dockerignore
+.venv/
+__pycache__/
+*.pyc
 docker/
 tmp/
-/base
