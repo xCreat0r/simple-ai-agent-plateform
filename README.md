@@ -9,7 +9,7 @@
 - **对话历史** — 自动保存会话，支持多轮对话上下文与历史回溯
 - **工具调用** — Agent 可自动调用内置工具（网页搜索、网络请求）或自定义 HTTP API
 - **自定义工具** — 可视化参数编辑器，无需手写 JSON Schema
-- **知识库 (RAG)** — 上传文档（TXT/Markdown/PDF）、自动分块、向量检索、Agent 绑定知识库
+- **知识库 (RAG)** — 上传文档（TXT/Markdown/PDF）、自动分块、异步向量化、Agent 绑定知识库、相似度检索并标注来源
 - **用户认证** — 邮箱 + 密码登录，Better Auth 驱动，适合多人使用
 
 ## Tech Stack
@@ -20,11 +20,11 @@
 | Frontend | React 19 + Vite 8 + Tailwind CSS 4 + @base-ui/react |
 | Language | TypeScript 6 |
 | Database | Cloudflare D1 (SQLite) |
-| Vector DB | Cloudflare Vectorize |
+| Vector DB | PostgreSQL pgvector |
 | ORM | Drizzle ORM |
 | AI SDK | Vercel AI SDK + OpenAI SDK (DeepSeek) |
 | Streaming | ReadableStream SSE |
-| Embedding | 阿里云 DashScope (text-embedding-v3) |
+| Embedding | Cloudflare Workers AI (@cf/baai/bge-m3) |
 | Auth | Better Auth (邮箱 + 密码) |
 | Validation | Zod 4 |
 | Cache | Cloudflare KV (限流/配额) |
@@ -201,7 +201,16 @@ npm run dev
 DEEPSEEK_API_KEY=sk-your-key                      # DeepSeek API Key
 DEEPSEEK_BASE_URL=https://api.deepseek.com/v1      # DeepSeek API 地址
 SERPAPI_API_KEY=your-serpapi-key                   # 网页搜索（可选）
-BAILIAN_API_KEY=sk-your-bailian-key                 # 文本嵌入（可选）
+
+# 嵌入服务（知识库 RAG）
+# EMBEDDING_PROVIDER=workers-ai                    # workers-ai（生产）/ dashscope（本地真实）/ mock（本地链路调试）
+DASHSCOPE_API_KEY=sk-your-dashscope-key            # 阿里云百炼 Key（EMBEDDING_PROVIDER=dashscope 时需要）
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+DASHSCOPE_EMBEDDING_MODEL=text-embedding-v3       # 1024 维，与数据库 schema 匹配
+
+# 检索参数（可选）
+# KNOWLEDGE_TOP_K=3
+# KNOWLEDGE_SIMILARITY_THRESHOLD=0.6             # cosine 距离阈值，越小越严格（DashScope 实测相关距离约 0.5-0.6）
 
 # Auth
 JWT_SECRET=                                     # openssl rand -base64 32 生成的签名密钥

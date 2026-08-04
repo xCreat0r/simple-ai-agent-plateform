@@ -26,6 +26,8 @@ export function KnowledgeDetail() {
     queryKey: ["documents", kbId],
     queryFn: () => api.getDocuments(kbId!),
     enabled: !!kbId,
+    refetchInterval: (query) =>
+      query.state.data?.some((d) => d.status === "processing") ? 2000 : false,
   });
 
   const deleteMutation = useMutation({
@@ -45,10 +47,21 @@ export function KnowledgeDetail() {
       queryClient.invalidateQueries({ queryKey: ["documents", kbId] });
     } catch (err) {
       console.error("Upload failed:", err);
+      alert(err instanceof Error ? err.message : "上传失败");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  const statusBadge = (doc: { status?: string; chunkCount: number; error?: string }) => {
+    if (doc.status === "processing") {
+      return <Badge variant="outline">嵌入中...</Badge>;
+    }
+    if (doc.status === "failed") {
+      return <Badge variant="destructive" title={doc.error || "嵌入失败"}>嵌入失败</Badge>;
+    }
+    return <Badge variant="secondary">{doc.chunkCount} 分块</Badge>;
   };
 
   return (
@@ -100,7 +113,7 @@ export function KnowledgeDetail() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Badge variant="secondary">{doc.chunkCount} 分块</Badge>
+                  {statusBadge(doc)}
                   <button
                     onClick={() => setDeleteDocId(doc.id)}
                     className="text-neutral-400 hover:text-red-600 transition-colors"

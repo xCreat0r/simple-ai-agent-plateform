@@ -26,4 +26,5 @@ export interface KnowledgeBase {
 
 export interface Document {
   id: string; filename: string; createdAt: string; chunkCount: number;
+  sizeBytes?: number; status?: string; error?: string;
 }

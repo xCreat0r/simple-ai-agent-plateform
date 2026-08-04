@@ -145,7 +145,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'deepseek-chat'"
+          "default": "'deepseek-v4-flash'"
         },
         "temperature": {
           "name": "temperature",
@@ -217,7 +217,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'新对话'"
+          "default": "'\u65b0\u5bf9\u8bdd'"
         },
         "created_at": {
           "name": "created_at",
@@ -387,13 +387,13 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": true,
           "notNull": true
         },
         "kb_id": {
           "name": "kb_id",
-          "type": "text",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
@@ -403,11 +403,25 @@
           "primaryKey": false,
           "notNull": true
         },
-        "content": {
-          "name": "content",
+        "size_bytes": {
+          "name": "size_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'processing'"
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

@@ -18,7 +18,9 @@ export const knowledgeDocuments = pgTable("knowledge_documents", {
     .notNull()
     .references(() => knowledgeBases.id, { onDelete: "cascade" }),
   filename: text("filename").notNull(),
-  content: text("content").notNull(),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  status: text("status").notNull().default("processing"),
+  error: text("error"),
   createdAt: timestamp("created_at").notNull(),
 });
 

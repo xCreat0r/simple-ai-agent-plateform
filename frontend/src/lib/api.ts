@@ -1,5 +1,6 @@
 const API = import.meta.env.VITE_API_URL;
 
+// 内存中保存 access token；refreshPromise 用于并发去重，避免多个请求同时刷新
 let accessToken: string | null = null;
 let refreshPromise: Promise<{ user: { id: string; name: string | null }; accessToken: string } | null> | null = null;
 
@@ -7,7 +8,9 @@ export function getAccessToken() {
   return accessToken;
 }
 
+// 通过 HttpOnly cookie 中的 refresh token 换取新的 access token
 async function doRefresh() {
+  // 若已有刷新请求进行中，直接复用同一 Promise
   if (refreshPromise) return refreshPromise;
   refreshPromise = (async () => {
     try {
@@ -29,11 +32,11 @@ async function doRefresh() {
   return refreshPromise;
 }
 
+// 统一请求封装：自动附带 Bearer token，401 时先刷新再重试一次
 async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const buildFetch = (): Promise<Response> => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
-    console.log(headers)
     return fetch(`${API}${path}`, {
       ...opts,
       credentials: "include",
@@ -43,6 +46,7 @@ async function request<T>(path: string, opts?: RequestInit): Promise<T> {
 
   let res = await buildFetch();
   if (res.status === 401 && !path.startsWith("/api/auth/")) {
+    // access token 过期：刷新后重试原请求
     const refreshed = await doRefresh();
     if (refreshed) res = await buildFetch();
   }
@@ -102,13 +106,19 @@ export const api = {
   deleteKnowledgeBase: (id: string) => request<{ ok: boolean }>(`/api/knowledge/${id}`, { method: "DELETE" }),
   getDocuments: (kbId: string) => request<import("./types").Document[]>(`/api/knowledge/${kbId}/documents`),
   uploadDocument: (kbId: string, file: File) => {
+    // 文件上传需要 FormData，不使用 JSON 封装，单独处理
     const form = new FormData();
     form.append("file", file);
     const headers: Record<string, string> = {};
     if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
     return fetch(`${API}/api/knowledge/${kbId}/documents`, {
       method: "POST", credentials: "include", body: form, headers,
-    }).then((r) => r.json());
+    }).then((r) =>
+      r.json().then((data) => {
+        if (!r.ok) throw new Error(data.error || "上传失败");
+        return data as { id: string; filename: string; chunkCount: number; status: string };
+      })
+    );
   },
   deleteDocument: (kbId: string, docId: string) =>
     request<{ ok: boolean }>(`/api/knowledge/${kbId}/documents/${docId}`, { method: "DELETE" }),
