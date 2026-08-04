@@ -6,6 +6,10 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  // 嵌入服务使用 EMBEDDING_PROVIDER 环境变量切换（workers-ai / dashscope / mock）。
+  // 本地开发（wrangler dev）不支持 AI binding，请用 dashscope 或 mock。
+  // 生产若要使用 Cloudflare Workers AI，在此处取消注释并执行 wrangler deploy：
+  // "ai": { "binding": "AI" },
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
