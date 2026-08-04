@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Tool } from "@/lib/types";
 
@@ -80,8 +79,17 @@ function ToolForm({ initialData, onSuccess }: { initialData?: Partial<Tool>; onS
           </div>
 
           <div className="space-y-2">
-            <Label>HTTP 方法</Label>
-            <Select value={method} onValueChange={setMethod} items={methodOptions} />
+            <Label htmlFor="method">HTTP 方法</Label>
+            <select
+              id="method"
+              value={method}
+              onChange={(e) => setMethod(e.target.value)}
+              className="h-9 w-full rounded-md border border-neutral-300 bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400"
+            >
+              {methodOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-2">

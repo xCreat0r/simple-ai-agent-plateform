@@ -15,12 +15,11 @@ export const openai = new OpenAI({
 });
 
 export const AI_MODELS = {
-  "deepseek-chat": { label: "DeepSeek Chat", provider: "deepseek" },
-  "deepseek-reasoner": { label: "DeepSeek Reasoner", provider: "deepseek" },
+  "deepseek-v4-flash": { label: "DeepSeek V4 Flash", provider: "deepseek" },
 } as const;
 
 export function getModelForAgent(modelId: string): { model: string; provider: string } {
   const m = AI_MODELS[modelId as keyof typeof AI_MODELS];
   if (m) return { model: modelId, provider: m.provider };
-  return { model: "deepseek-chat", provider: "deepseek" };
+  return { model: "deepseek-v4-flash", provider: "deepseek" };
 }

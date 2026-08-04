@@ -6,20 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Agent } from "@/lib/types";
 
 const modelOptions = [
-  { value: "deepseek-chat", label: "DeepSeek Chat" },
-  { value: "deepseek-reasoner", label: "DeepSeek Reasoner" },
+  { value: "deepseek-v4-flash", label: "DeepSeek V4 Flash" },
 ];
 
 export function AgentForm({ initialData, onSuccess }: { initialData?: Partial<Agent>; onSuccess: () => void }) {
   const navigate = useNavigate();
   const [name, setName] = useState(initialData?.name || "");
   const [systemPrompt, setSystemPrompt] = useState(initialData?.systemPrompt || "");
-  const [model, setModel] = useState(initialData?.model || "deepseek-chat");
+  const [model, setModel] = useState(initialData?.model || "deepseek-v4-flash");
   const [temperature, setTemperature] = useState(initialData?.temperature ?? 0.7);
   const [maxTokens, setMaxTokens] = useState(initialData?.maxTokens ?? 2048);
   const [selectedTools, setSelectedTools] = useState<string[]>(initialData?.tools || []);
@@ -77,7 +75,16 @@ export function AgentForm({ initialData, onSuccess }: { initialData?: Partial<Ag
 
           <div className="space-y-2">
             <Label htmlFor="model">模型</Label>
-            <Select value={model} onValueChange={setModel} items={modelOptions} />
+            <select
+              id="model"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              className="h-9 w-full rounded-md border border-neutral-300 bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400"
+            >
+              {modelOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-2">

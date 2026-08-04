@@ -47,7 +47,7 @@ export const updateToolSchema = z.object({
 export const createAgentSchema = z.object({
   name: z.string().min(1),
   systemPrompt: z.string().default(""),
-  model: z.string().default("deepseek-chat"),
+  model: z.string().default("deepseek-v4-flash"),
   temperature: z.number().min(0).max(2).default(0.7),
   maxTokens: z.number().min(1).default(4096),
   tools: z.array(z.string()).default([]),
