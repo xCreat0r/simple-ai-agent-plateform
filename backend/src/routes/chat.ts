@@ -19,19 +19,23 @@ const chatRoutes = new Hono<Env>();
 
 chatRoutes.post("/", async (c) => {
   const userId = c.get("userId");
+  // regenerate: 重新生成最后一条用户消息的回复（删除其后所有 assistant/tool 消息）
   const { agentId, chatId: existingChatId, content, regenerate } = await c.req.json() as {
     agentId: string; chatId?: string; content?: string; regenerate?: boolean;
   };
 
+  // 非 regenerate 模式下 content 必填且不能超长
   if (!regenerate && (!content || typeof content !== "string" || content.length > config.chat.maxContentLength)) {
     return c.json({ error: "消息内容无效" }, 400);
   }
 
+  // 基于 KV 的固定窗口限流，按用户维度限制请求频率
   const rateLimit = await checkRateLimit(
     `chat:${userId}`, config.rateLimit.maxRequestsPerWindow, config.rateLimit.windowMs
   );
   if (!rateLimit.allowed) return c.json({ error: "请求过于频繁" }, 429);
 
+  // 校验 agent 归属：只能使用属于当前用户的 agent
   const db = getDb();
   const [agent] = await db
     .select()
@@ -39,6 +43,7 @@ chatRoutes.post("/", async (c) => {
     .where(and(eq(agents.id, agentId), eq(agents.userId, userId)));
   if (!agent) return c.json({ error: "Agent not found" }, 404);
 
+  // 每日请求配额校验（当前仅 free 套餐）
   const quota = await checkQuota(agent.userId);
   if (!quota.allowed) return c.json({ error: quota.reason || "配额已用完" }, 429);
 
@@ -48,13 +53,26 @@ chatRoutes.post("/", async (c) => {
   let chatId = existingChatId;
   const isNewChat = !chatId;
   if (!chatId) {
+    // 新对话：先创建 chat 记录，标题先用首条消息截断占位
     chatId = generateId();
     await db.insert(chats).values({
       id: chatId, agentId, title: content?.slice(0, 50) || "新对话", createdAt: new Date(),
     });
+  } else {
+    // 已有对话：校验该 chat 存在、属于当前用户且属于该 agent，
+    // 避免往不存在的 chat 插入消息触发外键错误，或跨 agent 串用
+    const [existing] = await db
+      .select({ id: chats.id })
+      .from(chats)
+      .innerJoin(agents, eq(chats.agentId, agents.id))
+      .where(and(eq(chats.id, chatId), eq(chats.agentId, agentId), eq(agents.userId, userId)))
+      .limit(1);
+    if (!existing) return c.json({ error: "对话不存在或无权访问" }, 404);
   }
 
   if (regenerate) {
+    // 重新生成：找到最后一条用户消息，删除其后所有 assistant/tool 消息，
+    // 使对话回退到"该用户消息刚发出"的状态
     const [lastUserMsg] = await db
       .select({ createdAt: messages.createdAt })
       .from(messages)
@@ -72,19 +90,24 @@ chatRoutes.post("/", async (c) => {
     });
   }
 
+  // 组装传给 LLM 的对话历史（含系统提示、工具调用/结果序列）
   const conversationMessages = await buildConversationMessages(chatId, agent.systemPrompt);
+  // regenerate 模式下 userQuery 从历史里取最后一条用户消息
   const userQuery = (regenerate
     ? (conversationMessages.filter((m) => m.role === "user").at(-1) as { content: string } | undefined)?.content
     : content) || "";
 
+  // 将 agent 关联的知识库内容注入为 system 消息（RAG 检索增强）
   await injectKnowledgeContext(conversationMessages, agentId, userQuery);
 
+  // 收集该 agent 启用的工具定义，供 LLM 选择调用
   const enabledTools = await Promise.all(enabledToolIds.map((id) => getTool(id)));
   const toolDefs = enabledTools.filter(Boolean).map((t) => ({
     type: "function" as const,
     function: { name: t!.id, description: t!.description, parameters: t!.parameters },
   }));
 
+  // 以 SSE 流式返回：ReadableStream 生产数据，runToolLoop 异步执行工具循环
   return stream(c, async (stream) => {
     const encoder = new TextEncoder();
     const sseStream = new ReadableStream({
@@ -93,6 +116,7 @@ chatRoutes.post("/", async (c) => {
           chatId, model: agent.model, temperature: agent.temperature, maxTokens: agent.maxTokens,
         }).then(async () => {
           controller.close();
+          // 新对话在首个回复完成后异步生成标题（失败不影响主流程）
           if (isNewChat) await generateChatTitle(chatId, agent.id, agent.model, userQuery);
         }).catch((err) => {
           controller.enqueue(encoder.encode(`\n\n错误: ${err.message}\n\n`));
@@ -101,6 +125,7 @@ chatRoutes.post("/", async (c) => {
       },
     });
 
+    // 将内部流逐块转发给客户端
     const reader = sseStream.getReader();
     while (true) {
       const { done, value } = await reader.read();
