@@ -63,6 +63,8 @@ docker run -d \
   crpi-ga7cj49iwn8ptcyv.cn-guangzhou.personal.cr.aliyuncs.com/xmaker513/base-service:latest
 ```
 
+> 镜像内置 `GIN_MODE=release`，生产环境不会输出 Gin 的 debug WARNING。
+
 | 参数 | 说明 |
 |------|------|
 | `-d` | 后台运行 |

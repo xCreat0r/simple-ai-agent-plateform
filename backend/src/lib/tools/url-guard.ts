@@ -11,6 +11,8 @@ function isInternalIPv4(ip: string): boolean {
   return INTERNAL_IPV4_PREFIXES.some((p) => ip.startsWith(p));
 }
 
+// 校验外部 URL，阻止 SSRF 攻击：
+// 仅允许 http/https，禁止访问内网/环回地址与云元数据服务
 export function validateExternalUrl(rawUrl: string): URL {
   let url: URL;
   try {

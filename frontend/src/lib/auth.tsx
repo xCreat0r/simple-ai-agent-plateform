@@ -16,6 +16,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // 应用启动时尝试用 refresh token 恢复登录态
   useEffect(() => {
     api.refresh().then((data) => {
       if (data?.user) setUser({ id: data.user.id, name: data.user.name });

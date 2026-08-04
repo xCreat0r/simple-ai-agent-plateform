@@ -10,6 +10,8 @@ export class AuthError extends Error {
   }
 }
 
+// 认证中间件：校验 Authorization: Bearer <accessToken>，
+// 校验通过后将 userId 写入请求上下文，供后续路由使用
 export async function requireUser(c: Context<Env>, next: Next) {
   const auth = c.req.header("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) throw new AuthError();

@@ -8,6 +8,7 @@ import { searchTool } from "./search-execute";
 import { webRequestTool } from "./web-request-execute";
 
 const BLOCKED_HEADERS = new Set([
+  // 禁止自定义工具伪造代理相关请求头，防止 SSRF/权限绕过
   "host",
   "content-length",
   "transfer-encoding",
@@ -20,6 +21,7 @@ const BLOCKED_HEADERS = new Set([
   "true-client-ip",
 ]);
 
+// 过滤用户自定义工具 header 中的受限请求头
 function sanitizeHeaders(headers: Record<string, string> | undefined): Record<string, string> {
   if (!headers) return {};
   const safe: Record<string, string> = {};
@@ -32,6 +34,7 @@ function sanitizeHeaders(headers: Record<string, string> | undefined): Record<st
 }
 
 const serverTools: Record<string, Tool> = {
+  // 内置工具（搜索、网页请求）优先于数据库自定义工具
   [searchTool.id]: searchTool,
   [webRequestTool.id]: webRequestTool,
 };
@@ -49,6 +52,7 @@ export async function getTool(id: string): Promise<Tool | undefined> {
 
   const params = toolParametersSchema.parse(dbTool.parameters);
 
+  // 自定义工具：执行时先做 URL 校验（防 SSRF），再按 GET/POST 组装请求
   return {
     id: dbTool.id,
     name: dbTool.name,
@@ -60,6 +64,7 @@ export async function getTool(id: string): Promise<Tool | undefined> {
       const headers = sanitizeHeaders(parsedHeaders as Record<string, string> | undefined);
       const endpointUrl = new URL(dbTool.endpoint);
       if (dbTool.method === "GET") {
+        // GET 请求将工具参数拼接到 query string
         const searchParams = new URLSearchParams(args as Record<string, string>);
         for (const [key, value] of searchParams) {
           endpointUrl.searchParams.set(key, value);
@@ -73,7 +78,7 @@ export async function getTool(id: string): Promise<Tool | undefined> {
           ...headers,
         },
         body: dbTool.method === "POST" ? JSON.stringify(args) : undefined,
-        redirect: "error",
+        redirect: "error", // 拒绝跟随重定向，防止绕过 URL 校验
       });
       const text = await res.text();
       return `状态码: ${res.status}\n${text.slice(0, 2000)}`;

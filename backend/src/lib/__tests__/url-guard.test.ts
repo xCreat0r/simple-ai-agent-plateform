@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { URL } from "url";
 import { validateExternalUrl } from "@/lib/tools/url-guard";
 
 describe("validateExternalUrl", () => {

@@ -10,6 +10,7 @@ export const searchTool: Tool = {
       return "搜索不可用：未配置 SERPAPI_API_KEY";
     }
 
+    // 调用 SerpAPI Google 搜索，返回前 5 条结果的标题/链接/摘要
     const query = encodeURIComponent(args.query as string);
     const url = `https://serpapi.com/search?q=${query}&engine=google`;
 

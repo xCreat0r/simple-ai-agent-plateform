@@ -17,6 +17,7 @@ import { Sidebar } from "@/components/sidebar";
 
 const queryClient = new QueryClient();
 
+// 路由守卫：加载完成后若无登录态则跳转登录页
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="flex items-center justify-center h-screen">加载中...</div>;
@@ -24,6 +25,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// 登录后主布局：左侧栏 + 内容区
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen">

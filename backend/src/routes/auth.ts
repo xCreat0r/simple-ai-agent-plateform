@@ -18,10 +18,12 @@ const COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60,
 };
 
+// 从请求 cookie 中读取 refresh token
 function getMetaFromCookie(c: any): string | undefined {
   return getCookie(c, "refresh_token");
 }
 
+// 生成 refresh token：写入数据库（用于撤销/校验）+ 下发 HttpOnly cookie
 async function setRefreshTokenCookie(c: any, userId: string) {
   const token = generateRefreshToken();
   const now = new Date();
@@ -39,11 +41,13 @@ async function setRefreshTokenCookie(c: any, userId: string) {
   return token;
 }
 
+// 刷新令牌轮换：旧 token 一次性使用，用后即删，防止重放攻击
 async function rotateRefreshToken(c: any, oldToken: string, userId: string) {
   await getDb().delete(refreshTokens).where(eq(refreshTokens.token, oldToken));
   await setRefreshTokenCookie(c, userId);
 }
 
+// 根据 refresh token 查找用户：不存在或已过期返回 null
 async function getUserFromRefreshToken(token: string) {
   const now = new Date();
   const [row] = await getDb()
@@ -71,6 +75,7 @@ authRoutes.post("/sign-up/email", async (c) => {
 
   const id = generateId();
   const now = new Date();
+  // 密码使用 bcrypt 加盐哈希后存储，绝不明文保存
   const passwordHash = await hash(password, 10);
 
   await getDb().insert(users).values({

@@ -8,6 +8,7 @@ export async function buildConversationMessages(
   chatId: string,
   systemPrompt: string | null
 ): Promise<OpenAI.Chat.Completions.ChatCompletionMessageParam[]> {
+  // 只取最近 20 条消息作为上下文窗口，控制 token 成本
   const recentHistory = await getDb()
     .select()
     .from(messages)
@@ -15,10 +16,13 @@ export async function buildConversationMessages(
     .orderBy(desc(messages.createdAt))
     .limit(20);
 
+  // 数据库按时间倒序查询，需要反转回正序
   const history = recentHistory.reverse();
   const historyMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
   const toolCallIdSet = new Set<string>();
 
+  // 将 DB 记录转换为 OpenAI Chat API 所需的消息格式。
+  // assistant 消息要还原 tool_calls，tool 消息要带 tool_call_id 关联。
   for (const m of history) {
     if (m.role === "user") {
       historyMessages.push({ role: "user", content: m.content });
@@ -44,6 +48,8 @@ export async function buildConversationMessages(
     }
   }
 
+  // 检测工具调用序列是否完整：assistant 声明了 tool_calls 就必须有对应 tool 结果，
+  // 否则序列断裂会导致 API 报错，需要丢弃该段历史重新开始
   const hasIncompleteSequence = detectIncompleteToolSequence(historyMessages);
 
   let conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
@@ -57,6 +63,7 @@ export async function buildConversationMessages(
 
   const styleGuide = "\n\n回复风格：用自然对话语气。可以使用代码块、列表、加粗、表格组织内容，但不要使用 emoji。";
 
+  // 系统提示词置顶：优先使用 agent 自定义提示词，否则用默认助手提示词
   if (systemPrompt) {
     conversationMessages.unshift({
       role: "system",
@@ -72,6 +79,8 @@ export async function buildConversationMessages(
   return conversationMessages;
 }
 
+// 遍历消息序列：若某个 assistant 消息声明了 tool_calls，
+// 但其后紧跟的 tool 消息并未覆盖所有声明的 call id，则判定序列不完整
 function detectIncompleteToolSequence(
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
 ): boolean {

@@ -13,6 +13,8 @@ export async function checkRateLimit(
 ): Promise<RateLimitResult> {
   const { env } = getCloudflareContext();
   const now = Date.now();
+  // 固定时间窗口限流：窗口键 = 当前时间 / 窗口长度 取整，
+  // 同一窗口内计数，超过阈值则拒绝
   const windowKey = Math.floor(now / windowMs);
   const kvKey = `ratelimit:${key}:${windowKey}`;
 
@@ -20,10 +22,12 @@ export async function checkRateLimit(
   const count = current ? parseInt(current, 10) : 0;
 
   if (count >= maxRequests) {
+    // 超限：计算窗口结束时间供客户端知道何时重试
     const resetAt = (windowKey + 1) * windowMs;
     return { allowed: false, remaining: 0, resetAt };
   }
 
+  // KV 写入带 TTL 自动过期，窗口结束后计数自动清空
   await env.RATE_LIMIT_KV.put(kvKey, String(count + 1), {
     expirationTtl: Math.ceil(windowMs / 1000),
   });
