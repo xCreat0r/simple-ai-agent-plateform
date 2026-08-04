@@ -12,12 +12,40 @@ const agentsRoutes = new Hono<Env>();
 
 agentsRoutes.get("/", async (c) => {
   const userId = c.get("userId");
-  const rows = await getDb()
+  const db = getDb();
+  const rows = await db
     .select()
     .from(agents)
     .where(eq(agents.userId, userId))
     .orderBy(desc(agents.updatedAt));
-  return c.json(rows);
+
+  // 批量查询关联的工具与知识库，避免 N+1
+  const agentIds = rows.map((r) => r.id);
+  const toolRows = agentIds.length > 0
+    ? await db.select().from(agentTools).where(inArray(agentTools.agentId, agentIds))
+    : [];
+  const kbRows = agentIds.length > 0
+    ? await db.select().from(agentKnowledge).where(inArray(agentKnowledge.agentId, agentIds))
+    : [];
+
+  const toolMap = new Map<string, string[]>();
+  for (const r of toolRows) {
+    const arr = toolMap.get(r.agentId) || [];
+    arr.push(r.toolId);
+    toolMap.set(r.agentId, arr);
+  }
+  const kbMap = new Map<string, string[]>();
+  for (const r of kbRows) {
+    const arr = kbMap.get(r.agentId) || [];
+    arr.push(r.kbId);
+    kbMap.set(r.agentId, arr);
+  }
+
+  return c.json(rows.map((r) => ({
+    ...r,
+    tools: toolMap.get(r.id) || [],
+    knowledgeBaseIds: kbMap.get(r.id) || [],
+  })));
 });
 
 agentsRoutes.get("/:id", async (c) => {
