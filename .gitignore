@@ -27,3 +27,6 @@ backend/dist
 # frontend
 frontend/node_modules
 frontend/dist
+
+# 内部文档（不提交到 git）
+/internal-docs
