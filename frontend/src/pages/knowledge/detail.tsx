@@ -75,7 +75,7 @@ export function KnowledgeDetail() {
           <input
             type="file"
             ref={fileInputRef}
-            accept=".pdf,.txt,.md,.json,.csv"
+            accept=".pdf,.txt,.csv,.json,.md,.markdown"
             className="hidden"
             onChange={handleFileUpload}
           />

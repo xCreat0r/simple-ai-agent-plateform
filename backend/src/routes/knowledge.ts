@@ -10,6 +10,7 @@ import { getCloudflareContext, getHyperdriveConnectionString } from "@/lib/env-h
 import { config } from "@/lib/config";
 import { checkKnowledgeStorage } from "@/lib/quota";
 import { deduplicateChunks } from "@/lib/util/text";
+import { decodeTextBuffer } from "@/lib/util/encoding";
 
 
 const knowledgeRoutes = new Hono<Env>();
@@ -120,11 +121,11 @@ knowledgeRoutes.post("/:id/documents", async (c) => {
   const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
   if (!ALLOWED.has(ext)) return c.json({ error: "不支持的文件类型" }, 400);
 
-  // 提取文本：PDF 走 Go 解析服务，其余直接按 UTF-8 解码
+  // 提取文本：PDF 走 Python base 解析服务，其余按编码探测解码（自动识别 UTF-8 / GBK）
   const arrBuf = await file.arrayBuffer();
   const text = ext === ".pdf"
     ? await parsePdf(arrBuf)
-    : new TextDecoder().decode(arrBuf);
+    : decodeTextBuffer(arrBuf);
 
   if (!text.trim()) return c.json({ error: "文件内容为空" }, 400);
 

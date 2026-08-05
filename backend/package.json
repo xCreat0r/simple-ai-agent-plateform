@@ -19,6 +19,7 @@
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.7.0",
+    "iconv-lite": "^0.7.3",
     "jose": "^6.2.4",
     "openai": "^6.39.0",
     "postgres": "^3.4.9",
