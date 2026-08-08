@@ -121,6 +121,26 @@ agentsRoutes.put("/:id", async (c) => {
     .where(and(eq(agents.id, id), eq(agents.userId, userId)));
   if (!agent) return c.json({ error: "Not found" }, 404);
 
+  // 与 POST 一致：更新关联前校验工具/知识库归属当前用户，杜绝越权绑定他人资源
+  if (body.tools !== undefined && body.tools.length > 0) {
+    const existing = await db
+      .select({ id: tools.id })
+      .from(tools)
+      .where(and(inArray(tools.id, body.tools), eq(tools.userId, userId)));
+    if (existing.length !== body.tools.length) {
+      return c.json({ error: "部分工具不存在或无权访问" }, 400);
+    }
+  }
+  if (body.knowledgeBaseIds !== undefined && body.knowledgeBaseIds.length > 0) {
+    const existing = await db
+      .select({ id: knowledgeBases.id })
+      .from(knowledgeBases)
+      .where(and(inArray(knowledgeBases.id, body.knowledgeBaseIds), eq(knowledgeBases.userId, userId)));
+    if (existing.length !== body.knowledgeBaseIds.length) {
+      return c.json({ error: "部分知识库不存在或无权访问" }, 400);
+    }
+  }
+
   const updateData: Record<string, unknown> = {};
   if (body.name !== undefined) updateData.name = body.name;
   if (body.systemPrompt !== undefined) updateData.systemPrompt = body.systemPrompt;

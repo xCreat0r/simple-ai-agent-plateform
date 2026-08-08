@@ -123,9 +123,18 @@ knowledgeRoutes.post("/:id/documents", async (c) => {
 
   // 提取文本：PDF 走 Python base 解析服务，其余按编码探测解码（自动识别 UTF-8 / GBK）
   const arrBuf = await file.arrayBuffer();
-  const text = ext === ".pdf"
-    ? await parsePdf(arrBuf)
-    : decodeTextBuffer(arrBuf);
+  let text: string;
+  if (ext === ".pdf") {
+    try {
+      text = await parsePdf(arrBuf);
+    } catch (err) {
+      // 解析失败（如扫描件无文字层 / base 服务不可用）返回可读错误，不落库
+      const message = err instanceof Error ? err.message : "PDF 解析失败";
+      return c.json({ error: message }, 422);
+    }
+  } else {
+    text = decodeTextBuffer(arrBuf);
+  }
 
   if (!text.trim()) return c.json({ error: "文件内容为空" }, 400);
 

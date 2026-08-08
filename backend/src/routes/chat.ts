@@ -97,8 +97,13 @@ chatRoutes.post("/", async (c) => {
     ? (conversationMessages.filter((m) => m.role === "user").at(-1) as { content: string } | undefined)?.content
     : content) || "";
 
-  // 将 agent 关联的知识库内容注入为 system 消息（RAG 检索增强）
-  await injectKnowledgeContext(conversationMessages, agentId, userQuery);
+  // 将 agent 关联的知识库内容注入为 system 消息（RAG 检索增强）。
+  // 检索或嵌入失败时不中断对话，回退为普通回答。
+  try {
+    await injectKnowledgeContext(conversationMessages, agentId, userQuery);
+  } catch (err) {
+    console.warn(`[chat] 知识检索失败，跳过知识注入: ${err instanceof Error ? err.message : "未知错误"}`);
+  }
 
   // 收集该 agent 启用的工具定义，供 LLM 选择调用
   const enabledTools = await Promise.all(enabledToolIds.map((id) => getTool(id)));
