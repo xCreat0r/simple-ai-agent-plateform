@@ -10,7 +10,7 @@
 - **工具调用** — Agent 可自动调用内置工具（网页搜索、网络请求）或自定义 HTTP API
 - **自定义工具** — 可视化参数编辑器，无需手写 JSON Schema
 - **知识库 (RAG)** — 上传文档（TXT/Markdown/PDF）、自动分块、异步向量化、Agent 绑定知识库、相似度检索并标注来源
-- **用户认证** — 邮箱 + 密码登录，Better Auth 驱动，适合多人使用
+- **用户认证** — 邮箱 + 密码登录，自研 JWT + refresh token 轮换，适合多人使用
 
 ## Tech Stack
 
@@ -19,15 +19,15 @@
 | Backend | Hono 4.x (Cloudflare Workers) |
 | Frontend | React 19 + Vite 8 + Tailwind CSS 4 + @base-ui/react |
 | Language | TypeScript 6 |
-| Database | Cloudflare D1 (SQLite) |
-| Vector DB | PostgreSQL pgvector |
-| ORM | Drizzle ORM |
-| AI SDK | Vercel AI SDK + OpenAI SDK (DeepSeek) |
+| Database | PostgreSQL（Hyperdrive 代理）+ pgvector |
+| Vector DB | PostgreSQL pgvector (cosine, 1024d) |
+| ORM | Drizzle ORM (postgres-js) |
+| AI SDK | OpenAI SDK (DeepSeek) |
 | Streaming | ReadableStream SSE |
-| Embedding | Cloudflare Workers AI (@cf/baai/bge-m3) |
-| Auth | Better Auth (邮箱 + 密码) |
+| Embedding | workers-ai (BGE-M3) / DashScope / mock（EMBEDDING_PROVIDER 切换） |
+| Auth | 自研 JWT (jose) + refresh token 轮换 |
 | Validation | Zod 4 |
-| Cache | Cloudflare KV (限流/配额) |
+| Cache | Cloudflare KV（限流） |
 | Deploy | Cloudflare Workers + Pages |
 
 ## Quick Start
@@ -97,7 +97,7 @@ npm run dev
 │   │   ├── routes/              # API 路由
 │   │   │   ├── _middleware.ts   # requireUser 认证中间件
 │   │   │   ├── agents.ts        # /api/agents CRUD
-│   │   │   ├── auth.ts          # /api/auth (Better Auth)
+│   │   │   ├── auth.ts          # /api/auth (自研 JWT)
 │   │   │   ├── chat.ts          # /api/chat 流式对话
 │   │   │   ├── chats.ts         # /api/chats 对话管理
 │   │   │   ├── knowledge.ts     # /api/knowledge 知识库 CRUD
@@ -107,8 +107,8 @@ npm run dev
 │   │       ├── ai/              # AI 能力 (provider / embedding / chunker / retriever)
 │   │       ├── chat/            # 对话逻辑 (build-context / retrieve / tool-loop / generate-title)
 │   │       ├── tools/           # 工具系统 (内置工具 + 自定义工具 + url-guard)
-│   │       ├── db/              # Drizzle ORM (D1 适配) + 13 张表 schema
-│   │       ├── auth.ts          # Better Auth 配置
+│   │       ├── db/              # Drizzle ORM (postgres-js) + 11 张表 schema
+│   │       ├── jwt.ts           # access token + refresh token 签发/校验
 │   │       ├── config.ts        # 统一配置
 │   │       ├── env-holder.ts    # Cloudflare 环境持有者
 │   │       ├── errors.ts        # 统一错误响应
@@ -131,6 +131,7 @@ npm run dev
 │   │   └── lib/                 # api 客户端 / auth 上下文 / types / utils
 │   └── vite.config.ts
 │
+├── services/                    # 辅助服务（base: PDF 解析，Python FastAPI + PyMuPDF）
 ├── docs/                        # 架构 + 部署文档
 ├── specs/                       # MVP 规格
 ├── AGENTS.md                    # AI 编码代理规则
@@ -212,6 +213,9 @@ DASHSCOPE_EMBEDDING_MODEL=text-embedding-v3       # 1024 维，与数据库 sche
 # KNOWLEDGE_TOP_K=3
 # KNOWLEDGE_SIMILARITY_THRESHOLD=0.6             # cosine 距离阈值，越小越严格（DashScope 实测相关距离约 0.5-0.6）
 
+# PDF 解析（base 服务）
+# BASE_SERVICE_URL=http://localhost:8000          # 上传 PDF 时需要（部署见 docs/ecs-deployment.md）
+
 # Auth
 JWT_SECRET=                                     # openssl rand -base64 32 生成的签名密钥
 VITE_API_URL=http://localhost:8787               # 前端 API 地址（frontend/.env）
@@ -220,6 +224,7 @@ VITE_API_URL=http://localhost:8787               # 前端 API 地址（frontend/
 ## Deployment
 
 参见 [docs/cloudflare-deployment.md](docs/cloudflare-deployment.md)。
+PDF 解析 base 服务部署参见 [docs/ecs-deployment.md](docs/ecs-deployment.md)。
 
 ## MVP Scope
 
@@ -228,7 +233,7 @@ VITE_API_URL=http://localhost:8787               # 前端 API 地址（frontend/
 ✅ 对话历史              ✅ Tool Calling
 ✅ 网页搜索 + 网络请求    ✅ 自定义工具
 ✅ 知识库 (RAG)          ✅ 文档上传 + 向量检索
-✅ 用户认证 (Better Auth) ✅ 多用户数据隔离
+✅ 用户认证 (自研 JWT)    ✅ 多用户数据隔离
 
 明确不做的功能（后续迭代考虑）：
 ✗ 多 Agent 编排          ✗ MCP 协议
