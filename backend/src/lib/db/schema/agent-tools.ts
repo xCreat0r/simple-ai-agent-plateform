@@ -9,7 +9,7 @@ export const agentTools = pgTable(
       .references(() => agents.id, { onDelete: "cascade" }),
     toolId: text("tool_id").notNull(),
   },
-  (table) => ({
-    pk: primaryKey({ columns: [table.agentId, table.toolId] }),
-  })
+  (table) => [
+    primaryKey({ columns: [table.agentId, table.toolId] }),
+  ]
 );

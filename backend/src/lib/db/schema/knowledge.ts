@@ -48,7 +48,7 @@ export const agentKnowledge = pgTable(
       .notNull()
       .references(() => knowledgeBases.id, { onDelete: "cascade" }),
   },
-  (table) => ({
-    pk: primaryKey({ columns: [table.agentId, table.kbId] }),
-  })
+  (table) => [
+    primaryKey({ columns: [table.agentId, table.kbId] }),
+  ]
 );
