@@ -8,10 +8,19 @@ import { Library, Plus } from "lucide-react";
 
 export function KnowledgeList() {
   const navigate = useNavigate();
-  const { data: knowledge, isLoading } = useQuery({ queryKey: ["knowledge"], queryFn: api.getKnowledge });
+  const { data: knowledge, isLoading, isError, refetch } = useQuery({ queryKey: ["knowledge"], queryFn: api.getKnowledge });
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-64 text-neutral-500">加载中...</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-3 text-neutral-500">
+        <span>加载失败</span>
+        <Button variant="outline" onClick={() => refetch()}>重试</Button>
+      </div>
+    );
   }
 
   return (

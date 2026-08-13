@@ -9,10 +9,19 @@ import { Bot, Plus } from "lucide-react";
 
 export function AgentsList() {
   const navigate = useNavigate();
-  const { data: agents, isLoading } = useQuery({ queryKey: ["agents"], queryFn: api.getAgents });
+  const { data: agents, isLoading, isError, refetch } = useQuery({ queryKey: ["agents"], queryFn: api.getAgents });
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-64 text-neutral-500">加载中...</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-3 text-neutral-500">
+        <span>加载失败</span>
+        <Button variant="outline" onClick={() => refetch()}>重试</Button>
+      </div>
+    );
   }
 
   return (

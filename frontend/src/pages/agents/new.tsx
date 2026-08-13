@@ -22,6 +22,7 @@ export function AgentForm({ initialData, onSuccess }: { initialData?: Partial<Ag
   const [maxTokens, setMaxTokens] = useState(initialData?.maxTokens ?? 2048);
   const [selectedTools, setSelectedTools] = useState<string[]>(initialData?.tools || []);
   const [selectedKnowledge, setSelectedKnowledge] = useState<string[]>(initialData?.knowledgeBaseIds || []);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: tools } = useQuery({ queryKey: ["tools"], queryFn: api.getTools });
   const { data: knowledge } = useQuery({ queryKey: ["knowledge"], queryFn: api.getKnowledge });
@@ -30,11 +31,13 @@ export function AgentForm({ initialData, onSuccess }: { initialData?: Partial<Ag
     mutationFn: (data: { name: string; tools: string[]; knowledgeBaseIds: string[] }) =>
       api.createAgent({ ...data, systemPrompt, model, temperature, maxTokens }),
     onSuccess,
+    onError: (err) => setError(err instanceof Error ? err.message : "保存失败"),
   });
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<Agent>) => api.updateAgent(initialData!.id!, data),
     onSuccess,
+    onError: (err) => setError(err instanceof Error ? err.message : "保存失败"),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -58,6 +61,9 @@ export function AgentForm({ initialData, onSuccess }: { initialData?: Partial<Ag
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>{initialData ? "编辑 Agent" : "新建 Agent"}</CardTitle>
@@ -88,8 +94,9 @@ export function AgentForm({ initialData, onSuccess }: { initialData?: Partial<Ag
           </div>
 
           <div className="space-y-2">
-            <Label>温度 ({temperature})</Label>
+            <Label htmlFor="temperature">温度 ({temperature})</Label>
             <input
+              id="temperature"
               type="range"
               min="0"
               max="2"

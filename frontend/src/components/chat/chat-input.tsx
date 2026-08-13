@@ -24,6 +24,8 @@ export function ChatInput({ onSend, onStop, loading }: ChatInputProps) {
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // 中文等输入法组合态下 Enter 用于选词，不应触发发送
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();

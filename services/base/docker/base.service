@@ -7,11 +7,11 @@ Type=simple
 User=nobody
 Group=nogroup
 WorkingDirectory=/app
+EnvironmentFile=/etc/base-service.env
 ExecStart=/usr/local/bin/uvicorn app.main:app --host 0.0.0.0 --port 38080
 Restart=always
 RestartSec=5
 Environment=PORT=38080
-Environment=SERVICE_TOKEN=
 
 [Install]
 WantedBy=multi-user.target

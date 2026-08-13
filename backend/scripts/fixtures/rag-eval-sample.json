@@ -1,0 +1,14 @@
+[
+  {
+    "_comment": "示例标注集：将 kbIds / relevantDocIds 替换为实际的知识库与文档 id（GET /api/knowledge 与 /api/knowledge/:id/documents 可获取）。建议建立 ≥50 条查询的测试集作为质量基线。",
+    "query": "退货怎么办理？",
+    "kbIds": ["YOUR_KB_ID"],
+    "relevantDocIds": ["YOUR_DOC_ID"]
+  },
+  {
+    "_comment": "每条 query 标注其相关文档（可多个），用于计算 SI-01 召回率@topK 与 SI-02 精确率@topK。",
+    "query": "产品保修期限是多久？",
+    "kbIds": ["YOUR_KB_ID"],
+    "relevantDocIds": ["YOUR_DOC_ID"]
+  }
+]

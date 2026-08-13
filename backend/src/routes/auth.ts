@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { hash, compare } from "bcryptjs";
 import { eq } from "drizzle-orm";
@@ -7,8 +8,38 @@ import { users, refreshTokens } from "@/lib/db/schema";
 import { signAccessToken, verifyAccessToken, generateRefreshToken } from "@/lib/jwt";
 import { generateId } from "@/lib/util/uuid";
 import { AuthError } from "./_middleware";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { config } from "@/lib/config";
 
 const authRoutes = new Hono<{ Bindings: CloudflareEnv }>();
+
+// 公开配置：供前端判断注册开关等无需登录即可读取的配置项
+authRoutes.get("/config", async (c) => {
+  return c.json({ allowSignup: config.auth.allowSignup });
+});
+
+// 客户端 IP：优先 cf-connecting-ip（Cloudflare 提供），本地回退 x-forwarded-for
+function clientIp(c: Context): string {
+  return (
+    c.req.header("cf-connecting-ip") ||
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown"
+  );
+}
+
+// 认证接口限流：超限返回 429（防暴力破解/接口滥用）
+async function enforceAuthRateLimit(c: Context, scope: string, maxPerWindow: number): Promise<boolean> {
+  const rl = await checkRateLimit(
+    `auth:${scope}:${clientIp(c)}`,
+    maxPerWindow,
+    config.rateLimit.windowMs
+  );
+  if (!rl.allowed) {
+    c.json({ error: "请求过于频繁" }, 429);
+    return false;
+  }
+  return true;
+}
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -60,12 +91,17 @@ async function getUserFromRefreshToken(token: string) {
 }
 
 authRoutes.post("/sign-up/email", async (c) => {
+  if (!(await enforceAuthRateLimit(c, "signup", 20))) return;
+  // 注册开关：生产环境可设 ALLOW_SIGNUP=false 关闭公开注册，仅管理员创建账号
+  if (!config.auth.allowSignup) {
+    return c.json({ error: "注册已关闭" }, 403);
+  }
   const { email, password, name } = await c.req.json();
   if (!email || !password || !name) {
     return c.json({ error: "邮箱、密码、名称为必填项" }, 400);
   }
-  if (password.length < 6) {
-    return c.json({ error: "密码长度不能少于6位" }, 400);
+  if (password.length < config.auth.minPasswordLength) {
+    return c.json({ error: `密码长度不能少于${config.auth.minPasswordLength}位` }, 400);
   }
 
   const existing = await getDb().select().from(users).where(eq(users.email, email));
@@ -95,6 +131,7 @@ authRoutes.post("/sign-up/email", async (c) => {
 });
 
 authRoutes.post("/sign-in/email", async (c) => {
+  if (!(await enforceAuthRateLimit(c, "signin", 10))) return;
   const { email, password } = await c.req.json();
   if (!email || !password) {
     return c.json({ error: "邮箱和密码为必填项" }, 400);
@@ -117,6 +154,7 @@ authRoutes.post("/sign-in/email", async (c) => {
 });
 
 authRoutes.post("/refresh", async (c) => {
+  if (!(await enforceAuthRateLimit(c, "refresh", 30))) return;
   const token = getMetaFromCookie(c);
   if (!token) throw new AuthError();
 

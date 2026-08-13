@@ -3,8 +3,10 @@ import { knowledgeChunks, knowledgeDocuments } from "@/lib/db/schema";
 import { eq, and, inArray, isNotNull, sql } from "drizzle-orm";
 import { cosineDistance } from "drizzle-orm/sql/functions/vector";
 import { generateEmbedding } from "./embedding";
+import { logger } from "@/lib/logger";
 
 export interface RetrievedChunk {
+  docId: string;
   content: string;
   filename: string;
 }
@@ -17,6 +19,7 @@ export async function retrieveContext(
 ): Promise<RetrievedChunk[]> {
   if (kbIds.length === 0) return [];
 
+  const startedAt = Date.now();
   // 1. 将用户问题编码为向量
   const embedding = await generateEmbedding(query);
   const db = getDb();
@@ -26,6 +29,7 @@ export async function retrieveContext(
 
   const rows = await db
     .select({
+      docId: knowledgeChunks.docId,
       content: knowledgeChunks.content,
       filename: knowledgeDocuments.filename,
     })
@@ -41,5 +45,13 @@ export async function retrieveContext(
     .orderBy(distance)
     .limit(topK);
 
-  return rows.map((r) => ({ content: r.content, filename: r.filename }));
+  logger.metric("knowledge.retrieve", {
+    kbCount: kbIds.length,
+    topK,
+    threshold,
+    hits: rows.length,
+    elapsedMs: Date.now() - startedAt,
+  });
+
+  return rows.map((r) => ({ docId: r.docId, content: r.content, filename: r.filename }));
 }

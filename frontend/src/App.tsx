@@ -15,7 +15,12 @@ import { Login } from "@/pages/login";
 import { Signup } from "@/pages/signup";
 import { Sidebar } from "@/components/sidebar";
 
-const queryClient = new QueryClient();
+// 默认查询策略：失败重试 1 次、30s 内不重复拉取、窗口聚焦不自动刷新
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, staleTime: 30_000, refetchOnWindowFocus: false },
+  },
+});
 
 // 路由守卫：加载完成后若无登录态则跳转登录页
 function AuthGuard({ children }: { children: React.ReactNode }) {

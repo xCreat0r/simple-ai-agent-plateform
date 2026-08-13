@@ -9,10 +9,19 @@ import { Wrench, Plus } from "lucide-react";
 
 export function ToolsList() {
   const navigate = useNavigate();
-  const { data: tools, isLoading } = useQuery({ queryKey: ["tools"], queryFn: api.getTools });
+  const { data: tools, isLoading, isError, refetch } = useQuery({ queryKey: ["tools"], queryFn: api.getTools });
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-64 text-neutral-500">加载中...</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-3 text-neutral-500">
+        <span>加载失败</span>
+        <Button variant="outline" onClick={() => refetch()}>重试</Button>
+      </div>
+    );
   }
 
   const builtinTools = tools?.filter((t) => t.builtin) || [];

@@ -14,19 +14,24 @@ const methodOptions = [
   { value: "POST", label: "POST" },
 ];
 
-function safeParseJSON(str: string): Record<string, unknown> {
-  try { return JSON.parse(str); } catch { return {}; }
+// 严格解析 JSON；非法时抛错，避免静默以空数据提交
+function parseJSON(str: string, label: string): Record<string, unknown> {
+  try {
+    const v = JSON.parse(str);
+    if (v === null || typeof v !== "object" || Array.isArray(v)) throw new Error();
+    return v;
+  } catch {
+    throw new Error(`${label} 不是合法的 JSON 对象`);
+  }
 }
 
-function safeParseHeaders(str: string): Record<string, string> {
-  try {
-    const obj = JSON.parse(str);
-    const result: Record<string, string> = {};
-    for (const [k, v] of Object.entries(obj)) {
-      result[k] = String(v);
-    }
-    return result;
-  } catch { return {}; }
+function parseHeaders(str: string): Record<string, string> {
+  const obj = parseJSON(str, "自定义请求头");
+  const result: Record<string, string> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    result[k] = String(v);
+  }
+  return result;
 }
 
 function ToolForm({ initialData, onSuccess }: { initialData?: Partial<Tool>; onSuccess: () => void }) {
@@ -37,27 +42,46 @@ function ToolForm({ initialData, onSuccess }: { initialData?: Partial<Tool>; onS
   const [method, setMethod] = useState(initialData?.method || "GET");
   const [headers, setHeaders] = useState(initialData?.headers ? JSON.stringify(initialData.headers, null, 2) : "{}");
   const [parameters, setParameters] = useState(initialData?.parameters ? JSON.stringify(initialData.parameters, null, 2) : "{}");
+  const [error, setError] = useState<string | null>(null);
 
   const createMutation = useMutation({
-      mutationFn: () => api.createTool({ name, description, endpoint, method, headers: safeParseHeaders(headers), parameters: safeParseJSON(parameters) }),
+    mutationFn: (body: { name: string; description: string; endpoint: string; method: string; headers: Record<string, string>; parameters: Record<string, unknown> }) =>
+      api.createTool(body),
     onSuccess,
+    onError: (err) => setError(err instanceof Error ? err.message : "保存失败"),
   });
 
   const updateMutation = useMutation({
-      mutationFn: () => api.updateTool(initialData!.id!, { name, description, endpoint, method, headers: safeParseHeaders(headers), parameters: safeParseJSON(parameters) }),
+    mutationFn: (body: { name: string; description: string; endpoint: string; method: string; headers: Record<string, string>; parameters: Record<string, unknown> }) =>
+      api.updateTool(initialData!.id!, body),
     onSuccess,
+    onError: (err) => setError(err instanceof Error ? err.message : "保存失败"),
   });
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (initialData?.id) updateMutation.mutate();
-    else createMutation.mutate();
+    // 先校验 JSON，非法则不提交
+    let parsedHeaders: Record<string, string>;
+    let parsedParameters: Record<string, unknown>;
+    try {
+      parsedHeaders = parseHeaders(headers);
+      parsedParameters = parseJSON(parameters, "参数 JSON Schema");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "JSON 格式错误");
+      return;
+    }
+    const body = { name, description, endpoint, method, headers: parsedHeaders, parameters: parsedParameters };
+    if (initialData?.id) updateMutation.mutate(body);
+    else createMutation.mutate(body);
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>{initialData ? "编辑工具" : "新建工具"}</CardTitle>

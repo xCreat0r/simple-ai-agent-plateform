@@ -7,7 +7,7 @@
 ```
 用户请求
   │
-  └── https://your-domain.com:28080 (ECS 安全组放行)
+  └── https://your-domain.com:38080 (ECS 安全组放行)
         └── Docker 容器 (crpi-ga7cj49iwn8ptcyv.cn-guangzhou.personal.cr.aliyuncs.com/xmaker513/base-service)
               └── POST /doc-parser/parse — PDF 文本提取
               └── GET  /health           — 健康检查
@@ -54,23 +54,56 @@ docker pull crpi-ga7cj49iwn8ptcyv.cn-guangzhou.personal.cr.aliyuncs.com/xmaker51
 
 ## 第三步：运行容器
 
+先准备鉴权配置文件 `/etc/base-service.env`：
+
+```bash
+# 生成密钥对并写入配置文件（key 为标识，secret 用 openssl 生成）
+echo "BASE_SERVICE_KEYS=key1:$(openssl rand -base64 32)" > /etc/base-service.env
+chmod 600 /etc/base-service.env
+```
+
+> **应用层加密（可选）**：若启用 PDF 密文传输，追加 `PDF_ENCRYPTION_KEY` 并保持与 Worker 端一致：
+>
+> ```bash
+> PDF_KEY=$(openssl rand -base64 32)
+> echo "PDF_ENCRYPTION_KEY=${PDF_KEY}" >> /etc/base-service.env
+> # Worker 端需配置同一把: npx wrangler secret put PDF_ENCRYPTION_KEY
+> ```
+>
+> 部署顺序要求：**先配置 base 服务（含新代码+密钥），再切 Worker（含新代码+密钥）**，避免空窗期明文/密文不匹配。
+
 ```bash
 docker run -d \
   --name base-service \
   --restart unless-stopped \
-  -p 28080:8080 \
-  -e PORT=8080 \
+  -p 38080:38080 \
+  -e PORT=38080 \
+  -v /etc/base-service.env:/app/.env \
   crpi-ga7cj49iwn8ptcyv.cn-guangzhou.personal.cr.aliyuncs.com/xmaker513/base-service:latest
 ```
 
-> 镜像内置 `GIN_MODE=release`，生产环境不会输出 Gin 的 debug WARNING。
+> 服务为 Python FastAPI（uvicorn + PyMuPDF），启动时读取 `/app/.env` 中的 `BASE_SERVICE_KEYS`（也可用环境变量覆盖，优先级更高）。
+> **鉴权机制：HMAC-SHA256 请求签名**（无 TLS 公网下不传输明文密钥）。请求携带 `X-Api-Key` / `X-Timestamp` / `X-Nonce` / `X-Signature` 四头；base 按 `X-Api-Key` 查对应 secret，校验时间戳窗口（±300s）+ nonce 去重（防重放）+ 签名比对。签名串：`{timestamp}\n{nonce}\n{sha256Hex(body)}\n{path}`。
+> 校验失败返回 401；未配置 `BASE_SERVICE_KEYS` 返回 503（fail-closed）。**key/secret 必须与 Worker 端 `BASE_SERVICE_KEY` / `BASE_SERVICE_SECRET` 对应其中一组**。
 
 | 参数 | 说明 |
 |------|------|
 | `-d` | 后台运行 |
 | `--restart unless-stopped` | 崩溃自动重启，开机自启 |
-| `-p 28080:8080` | 宿主机 28080 端口映射到容器 8080 |
-| `-e PORT=8080` | 容器内监听端口（可选，默认即 8080） |
+| `-p 38080:38080` | 宿主机 38080 端口映射到容器 38080 |
+| `-e PORT=38080` | 容器内监听端口（可选，Dockerfile CMD 已指定 38080，可不设） |
+| `-v /etc/base-service.env:/app/.env` | 挂载鉴权配置文件（含 `BASE_SERVICE_KEYS=`，与 Worker 端一致） |
+
+> 若用 systemd 方式（见下方"高级"），配置文件改为 `/etc/base-service.env` 由 `EnvironmentFile=` 直接读取，无需挂载。
+
+### 密钥轮换（无中断）
+
+1. **添加**：在 `/etc/base-service.env` 的 `BASE_SERVICE_KEYS` 追加新组 `,key2:<新secret>`，`docker restart base-service`
+2. **切换**：Worker 端 `wrangler secret put BASE_SERVICE_KEY/BASE_SERVICE_SECRET` 换成新 key/secret（旧 key 在过渡期仍可验签）
+3. **验证**：上传 PDF 确认新 key 生效
+4. **移除**：从 `BASE_SERVICE_KEYS` 删除旧组，`docker restart base-service`
+
+> `BASE_SERVICE_KEYS` 在服务启动时解析，修改后需重启容器。任何单个请求只携带一组 key/签名（Worker 侧单 key 签名，base 侧多 key 可验证）。
 
 ---
 
@@ -84,7 +117,7 @@ docker ps | grep base-service
 docker logs -f base-service
 
 # 健康检查
-curl http://localhost:28080/health
+curl http://localhost:38080/health
 # 预期: {"status":"ok"}
 ```
 
@@ -96,10 +129,10 @@ curl http://localhost:28080/health
 
 | 协议 | 端口 | 源 | 用途 |
 |------|------|-----|------|
-| TCP | 28080 | 0.0.0.0/0 | 对外服务 |
+| TCP | 38080 | 0.0.0.0/0 | 对外服务 |
 | TCP | 22 | 你的 IP | SSH（仅运维） |
 
-> 建议将 28080 端口源限制为具体调用方 IP 或通过反向代理（Nginx）暴露。
+> 建议将 38080 端口源限制为具体调用方 IP 或通过反向代理（Nginx）暴露。
 
 ---
 
@@ -137,12 +170,13 @@ docker pull crpi-ga7cj49iwn8ptcyv.cn-guangzhou.personal.cr.aliyuncs.com/xmaker51
 # 2. 删除旧容器
 docker rm -f base-service
 
-# 3. 重新运行（复用第三步的命令）
+# 3. 重新运行（复用第三步的命令，确保 /etc/base-service.env 已配置）
 docker run -d \
   --name base-service \
   --restart unless-stopped \
-  -p 28080:8080 \
-  -e PORT=8080 \
+  -p 38080:38080 \
+  -e PORT=38080 \
+  -v /etc/base-service.env:/app/.env \
   crpi-ga7cj49iwn8ptcyv.cn-guangzhou.personal.cr.aliyuncs.com/xmaker513/base-service:latest
 ```
 
@@ -165,7 +199,10 @@ systemctl enable --now base
 ## 验证清单
 
 - [ ] `docker ps` 显示 `base-service` 为 `Up` 状态
-- [ ] `curl http://localhost:28080/health` 返回 `{"status":"ok"}`
-- [ ] 安全组 28080 端口已放行，外部可访问
+- [ ] `curl http://localhost:38080/health` 返回 `{"status":"ok"}`
+- [ ] 无/错签名头调用 `/doc-parser/parse` 返回 401
+- [ ] 正确签名调用 `/doc-parser/parse` 正常返回
+- [ ] 同 nonce 重放请求返回 401；过期时间戳返回 401
+- [ ] 安全组 38080 端口已放行，外部可访问
 - [ ] `--restart unless-stopped` 已生效（重启服务器后容器自动拉起）
 - [ ] 大陆与海外 ECS 均可从 ACR 正常拉取镜像

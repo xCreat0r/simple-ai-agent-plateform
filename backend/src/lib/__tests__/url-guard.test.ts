@@ -1,60 +1,129 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// mock node:dns，避免测试依赖真实网络
+vi.mock("node:dns", () => ({
+  default: {
+    promises: {
+      resolve4: vi.fn(),
+      resolve6: vi.fn(),
+    },
+  },
+  promises: {
+    resolve4: vi.fn(),
+    resolve6: vi.fn(),
+  },
+}));
+
+import dns from "node:dns";
 import { validateExternalUrl } from "@/lib/tools/url-guard";
 
+const resolve4 = vi.mocked(dns.promises.resolve4);
+const resolve6 = vi.mocked(dns.promises.resolve6);
+
+function mockDns(ipv4: string[], ipv6: string[] = []): void {
+  resolve4.mockResolvedValue(ipv4);
+  resolve6.mockResolvedValue(ipv6);
+}
+
 describe("validateExternalUrl", () => {
-  it("通过合法的外网 URL", () => {
-    const url = validateExternalUrl("https://api.example.com/data");
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("通过合法的外网 URL", async () => {
+    mockDns(["93.184.216.34"]);
+    const url = await validateExternalUrl("https://api.example.com/data");
     expect(url.hostname).toBe("api.example.com");
   });
 
-  it("拒绝无效 URL 格式", () => {
-    expect(() => validateExternalUrl("not-a-url")).toThrow("无效的 URL 格式");
+  it("拒绝无效 URL 格式", async () => {
+    await expect(validateExternalUrl("not-a-url")).rejects.toThrow("无效的 URL 格式");
   });
 
-  it("拒绝 localhost", () => {
-    expect(() => validateExternalUrl("http://localhost:3000/api")).toThrow(
+  it("拒绝 localhost", async () => {
+    mockDns(["127.0.0.1"]);
+    await expect(validateExternalUrl("http://localhost:3000/api")).rejects.toThrow(
       "不允许访问内网地址"
     );
   });
 
-  it("拒绝 127.0.0.1", () => {
-    expect(() => validateExternalUrl("http://127.0.0.1:8080")).toThrow(
+  it("拒绝 127.0.0.1", async () => {
+    mockDns(["127.0.0.1"]);
+    await expect(validateExternalUrl("http://127.0.0.1:8080")).rejects.toThrow(
       "不允许访问内网地址"
     );
   });
 
-  it("拒绝 10.x 内网 IP", () => {
-    expect(() => validateExternalUrl("http://10.0.0.1/api")).toThrow(
+  it("拒绝 10.x 内网 IP", async () => {
+    mockDns(["10.0.0.1"]);
+    await expect(validateExternalUrl("http://10.0.0.1/api")).rejects.toThrow(
       "不允许访问内网地址"
     );
   });
 
-  it("拒绝 192.168.x 内网 IP", () => {
-    expect(() => validateExternalUrl("http://192.168.1.1/api")).toThrow(
+  it("拒绝 192.168.x 内网 IP", async () => {
+    mockDns(["192.168.1.1"]);
+    await expect(validateExternalUrl("http://192.168.1.1/api")).rejects.toThrow(
       "不允许访问内网地址"
     );
   });
 
-  it("拒绝 172.16.x 内网 IP", () => {
-    expect(() => validateExternalUrl("http://172.16.0.1/api")).toThrow(
+  it("拒绝 172.16.x 内网 IP", async () => {
+    mockDns(["172.16.0.1"]);
+    await expect(validateExternalUrl("http://172.16.0.1/api")).rejects.toThrow(
       "不允许访问内网地址"
     );
   });
 
-  it("拒绝 AWS 元数据端点", () => {
-    expect(() => validateExternalUrl("http://169.254.169.254/latest/meta-data")).toThrow(
+  it("拒绝 AWS 元数据端点", async () => {
+    mockDns(["169.254.169.254"]);
+    await expect(validateExternalUrl("http://169.254.169.254/latest/meta-data")).rejects.toThrow(
       "不允许访问内网地址"
     );
   });
 
-  it("拒绝非 http/https 协议", () => {
-    expect(() => validateExternalUrl("ftp://files.example.com")).toThrow(
+  it("拒绝 DNS rebinding（域名解析到内网 IP）", async () => {
+    mockDns(["127.0.0.1"]);
+    await expect(validateExternalUrl("http://evil.example.com/path")).rejects.toThrow(
+      "不允许访问内网地址"
+    );
+  });
+
+  it("拒绝十进制编码 IP（2130706433 = 127.0.0.1）", async () => {
+    await expect(validateExternalUrl("http://2130706433/")).rejects.toThrow(
+      "不允许访问内网地址"
+    );
+  });
+
+  it("拒绝十六进制编码 IP（0x7f000001 = 127.0.0.1）", async () => {
+    await expect(validateExternalUrl("http://0x7f000001/")).rejects.toThrow(
+      "不允许访问内网地址"
+    );
+  });
+
+  it("拒绝无法解析的域名", async () => {
+    mockDns([]);
+    await expect(validateExternalUrl("http://no-such-host.invalid/")).rejects.toThrow(
+      "不允许访问内网地址"
+    );
+  });
+
+  it("拒绝 IPv4-mapped IPv6 内网", async () => {
+    mockDns([], ["::ffff:127.0.0.1"]);
+    await expect(validateExternalUrl("https://[::ffff:127.0.0.1]/")).rejects.toThrow(
+      "不允许访问内网地址"
+    );
+  });
+
+  it("拒绝非 http/https 协议", async () => {
+    await expect(validateExternalUrl("ftp://files.example.com")).rejects.toThrow(
       "仅支持 http/https 协议"
     );
   });
 
-  it("通过 HTTPS URL", () => {
-    const url = validateExternalUrl("https://www.google.com");
+  it("通过 HTTPS 公网 URL", async () => {
+    mockDns(["142.250.72.14"]);
+    const url = await validateExternalUrl("https://www.google.com");
     expect(url.protocol).toBe("https:");
   });
 });

@@ -9,12 +9,23 @@ import { EmptyState } from "@/components/empty-state";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FileText, Upload, Trash2 } from "lucide-react";
 
+function statusBadge(doc: { status?: string; chunkCount: number; error?: string }) {
+  if (doc.status === "processing") {
+    return <Badge variant="outline">嵌入中...</Badge>;
+  }
+  if (doc.status === "failed") {
+    return <Badge variant="destructive" title={doc.error || "嵌入失败"}>嵌入失败</Badge>;
+  }
+  return <Badge variant="secondary">{doc.chunkCount} 分块</Badge>;
+}
+
 export function KnowledgeDetail() {
   const { id: kbId } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const { data: kb } = useQuery({
     queryKey: ["knowledge", kbId],
@@ -22,7 +33,7 @@ export function KnowledgeDetail() {
     enabled: !!kbId,
   });
 
-  const { data: documents, isLoading } = useQuery({
+  const { data: documents, isLoading, isError } = useQuery({
     queryKey: ["documents", kbId],
     queryFn: () => api.getDocuments(kbId!),
     enabled: !!kbId,
@@ -42,26 +53,16 @@ export function KnowledgeDetail() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    setUploadError(null);
     try {
       await api.uploadDocument(kbId!, file);
       queryClient.invalidateQueries({ queryKey: ["documents", kbId] });
     } catch (err) {
-      console.error("Upload failed:", err);
-      alert(err instanceof Error ? err.message : "上传失败");
+      setUploadError(err instanceof Error ? err.message : "上传失败");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  };
-
-  const statusBadge = (doc: { status?: string; chunkCount: number; error?: string }) => {
-    if (doc.status === "processing") {
-      return <Badge variant="outline">嵌入中...</Badge>;
-    }
-    if (doc.status === "failed") {
-      return <Badge variant="destructive" title={doc.error || "嵌入失败"}>嵌入失败</Badge>;
-    }
-    return <Badge variant="secondary">{doc.chunkCount} 分块</Badge>;
   };
 
   return (
@@ -85,8 +86,14 @@ export function KnowledgeDetail() {
         </div>
       </div>
 
+      {uploadError && (
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{uploadError}</div>
+      )}
+
       {isLoading ? (
         <div className="flex items-center justify-center h-64 text-neutral-500">加载中...</div>
+      ) : isError ? (
+        <div className="flex items-center justify-center h-64 text-neutral-500">加载失败，请稍后重试</div>
       ) : !documents || documents.length === 0 ? (
         <EmptyState
           icon={<FileText className="h-12 w-12" />}

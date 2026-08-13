@@ -1,4 +1,4 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate, NavLink } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { Bot, Library, Wrench, LogOut } from "lucide-react";
@@ -10,7 +10,6 @@ const navItems = [
 ];
 
 export function Sidebar() {
-  const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
 
@@ -27,24 +26,23 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
-        {navItems.map(({ path, label, icon: Icon }) => {
-          const isActive = location.pathname.startsWith(path);
-          return (
-            <button
-              key={path}
-              onClick={() => navigate(path)}
-              className={cn(
+        {navItems.map(({ path, label, icon: Icon }) => (
+          <NavLink
+            key={path}
+            to={path}
+            className={({ isActive }) =>
+              cn(
                 "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 isActive
                   ? "bg-neutral-200 text-neutral-900"
                   : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          );
-        })}
+              )
+            }
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </NavLink>
+        ))}
       </nav>
 
       <div className="border-t border-neutral-200 p-3">

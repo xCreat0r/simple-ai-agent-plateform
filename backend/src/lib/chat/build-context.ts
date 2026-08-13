@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { messages } from "@/lib/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { toolCallSchema, toolResultSchema } from "@/lib/validators";
+import { UNTRUSTED_DECLARATION, wrapUntrusted } from "./untrusted";
 
 export async function buildConversationMessages(
   chatId: string,
@@ -44,7 +45,8 @@ export async function buildConversationMessages(
       const toolResultData = typeof m.toolResult === "string" ? JSON.parse(m.toolResult) : m.toolResult;
       const parsed = toolResultSchema.safeParse(toolResultData);
       const tid = parsed.success ? parsed.data.toolCallId : "";
-      historyMessages.push({ role: "tool", content: m.content, tool_call_id: tid });
+      // 工具返回值可能含恶意指令，用不可信标签包裹后再传给 LLM
+      historyMessages.push({ role: "tool", content: wrapUntrusted(m.content), tool_call_id: tid });
     }
   }
 
@@ -63,16 +65,17 @@ export async function buildConversationMessages(
 
   const styleGuide = "\n\n回复风格：用自然对话语气。可以使用代码块、列表、加粗、表格组织内容，但不要使用 emoji。";
 
-  // 系统提示词置顶：优先使用 agent 自定义提示词，否则用默认助手提示词
+  // 系统提示词置顶：优先使用 agent 自定义提示词，否则用默认助手提示词，
+  // 末尾始终附加防注入安全规则（含不可信数据标签语义）
   if (systemPrompt) {
     conversationMessages.unshift({
       role: "system",
-      content: systemPrompt + styleGuide,
+      content: systemPrompt + styleGuide + UNTRUSTED_DECLARATION,
     });
   } else {
     conversationMessages.unshift({
       role: "system",
-      content: "你是一个友好的 AI 助手。" + styleGuide,
+      content: "你是一个友好的 AI 助手。" + styleGuide + UNTRUSTED_DECLARATION,
     });
   }
 

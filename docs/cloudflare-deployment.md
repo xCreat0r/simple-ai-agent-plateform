@@ -12,7 +12,7 @@
         └── Cloudflare Workers (Hono API)
               │
               ├── Hyperdrive → Supabase PostgreSQL
-              │     ├── 关系数据（13 张表）
+              │     ├── 关系数据（11 张表）
               │     └── 向量数据（pgvector, 1024维, cosine）
               │
               ├── KV (限流 + 配额)
@@ -57,19 +57,29 @@ npx wrangler kv namespace create quota-kv
 ### 1.2 创建 Supabase 数据库
 
 1. 在 [supabase.com](https://supabase.com) 注册并创建项目
-2. 项目创建后，在 Settings → Database → Connection string 获取连接串
-3. 格式：`postgresql://postgres:xxxxx@db.xxxxx.supabase.co:5432/postgres`
-4. 在 Supabase SQL Editor 中启用 pgvector 扩展：
+2. 项目创建后，在 Dashboard → **Connect（连接）** → 数据库 → **Session Pooler（会话池化）** → 复制连接串。
+   **务必从 Dashboard 复制，不要手动拼写**（主机名以实际项目为准）。Session Pooler 格式：
+
+   ```
+   postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+   ```
+
+   > 密码包含在连接串内（`用户:密码@主机`），无需单独输入；若密码含特殊字符（`@` `:` `/`）需 URL 编码。
+3. 在 Supabase SQL Editor 中启用 pgvector 扩展（schema 推送的前置依赖，缺失会导致向量列创建失败）：
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
+> **为什么用 Session Pooler？** Supabase 直连地址（`db.<project-ref>.supabase.co`）要求 IPv6，多数本地/云网络无法直连，表现为 `db:push` 卡在 "Pulling schema from database..." 或连接超时。Session Pooler 支持 IPv4，下文所有 `DATABASE_URL`、seed、Hyperdrive 均使用它。
+>
+> 完整的数据库初始化流程见「第二步：初始化数据库」。
+
 ### 1.3 创建 Hyperdrive
 
 ```bash
 cd backend
-npx wrangler hyperdrive create agent-platform-hyperdrive --connection-string="postgresql://postgres:xxxxx@db.xxxxx.supabase.co:5432/postgres"
+npx wrangler hyperdrive create agent-platform-hyperdrive --connection-string="<1.2 复制的 Session Pooler 连接串>"
 ```
 
 输出示例：
@@ -109,25 +119,100 @@ docker exec pg-agent psql -U postgres -d agent_platform -c "CREATE EXTENSION IF 
 
 # 推送 Schema
 cd backend
-DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/agent_platform npx drizzle-kit push
+DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/agent_platform npm run db:push
 ```
 
 ### 2.2 生产（Supabase）
 
+前置：已完成 Supabase 建库并启用 pgvector（见 1.2）。随后：
+
 ```bash
-# 推送 Schema 到 Supabase
 cd backend
-DATABASE_URL="postgresql://postgres:xxxxx@db.xxxxx.supabase.co:5432/postgres" npx drizzle-kit push
+# 1. 安装依赖
+npm install
+
+# 2. 推送 Schema 到 Supabase（首次初始化；后续变更见 2.5 迁移）
+# DATABASE_URL 使用 1.2 复制的 Session Pooler 连接串
+DATABASE_URL="postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres" npm run db:push
 ```
+
+> 首次推送时数据库为空，drizzle 会展示将创建的建表语句并**询问是否应用**，输入 `y` 确认；自动化场景可用 `npm run db:push -- --force` 跳过询问。
+>
+> **排障**：若卡在 "Pulling schema from database..." 或连接超时，先 `nc -vz <主机名> 5432` 检查连通性，多半是连接串错误或误用了需要 IPv6 的直连地址——确认是从 Dashboard 复制的 Session Pooler 连接串。
+
+3. 在 Supabase SQL Editor 验证 Schema 与扩展已就绪：
+
+```sql
+-- 业务表（共 11 张）
+SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
+-- 扩展
+SELECT extname FROM pg_extension;
+```
+
+预期输出：`users`、`agents`、`agent_tools`、`chats`、`messages`、`tools`、`knowledge_bases`、`knowledge_documents`、`knowledge_chunks`、`agent_knowledge`、`refresh_tokens` 共 11 张表，且含 `vector` 扩展。
 
 ### 2.3 创建管理员账号
 
-通过应用注册页面创建，或直接插入 SQL：
+**注册默认关闭**，首次部署需用 seed 脚本初始化管理员账号（推荐）：
+
+```bash
+cd backend
+DATABASE_URL="postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres" \
+  SEED_EMAIL=admin@your-domain.com SEED_PASSWORD=your-password npm run db:seed
+# 可选: SEED_NAME=管理员（默认 admin@example.com / changeme123 / 管理员）
+# 脚本幂等：账号已存在时跳过，不会重复创建
+# DATABASE_URL 使用 1.2 复制的 Session Pooler 连接串，密码包含在串内，无需单独输入
+```
+
+或用 SQL 直接插入（**需要同时写入 bcrypt 哈希后的密码**，否则无法登录）：
+
+```bash
+# 先本地生成 bcrypt 哈希（替换成目标密码）
+cd backend && node -e "console.log(require('bcryptjs').hashSync('YOUR_PASSWORD', 10))"
+```
 
 ```sql
-INSERT INTO users (id, name, email, email_verified, created_at, updated_at)
-VALUES ('admin-id', '管理员', 'admin@example.com', true, now(), now());
+INSERT INTO users (id, name, email, email_verified, password_hash, created_at, updated_at)
+VALUES ('admin-id', '管理员', 'admin@example.com', true, '上面生成的哈希', now(), now());
 ```
+
+> **注册开关**：`ALLOW_SIGNUP`（wrangler secret）默认关闭。需要开放公开注册时执行 `npx wrangler secret put ALLOW_SIGNUP` 并输入 `true`；关闭后仅能用 seed/SQL 创建账号。前端注册页会在关闭时自动显示"注册已关闭"提示。
+
+### 2.4 初始化验证
+
+本地与生产通用，按顺序核对：
+
+- [ ] Schema 推送成功，`pg_tables` 查询到 11 张业务表（见 2.2）
+- [ ] `vector` 扩展存在（`SELECT extname FROM pg_extension;`）
+- [ ] `npm run db:seed` 输出「管理员账号创建成功」（幂等，重复执行显示「已存在」）
+- [ ] 启动后端后 `GET /api/health` 返回 `{"status":"healthy"}`（验证数据库连通）
+- [ ] 用管理员账号登录成功
+
+### 2.5 Schema 变更（迁移）
+
+两种方式，按场景选择：
+
+| 方式 | 命令 | 适用场景 |
+|------|------|---------|
+| `push` | `npm run db:push` | 快速同步，适合本地开发 / 初次建表 |
+| `generate + migrate` | 见下方 | 生产正式变更：生成 SQL 迁移文件 → 审查 → 应用 |
+
+生产建议使用迁移文件（变更可审计、可回溯）：
+
+```bash
+cd backend
+# DATABASE_URL 使用 1.2 复制的 Session Pooler 连接串
+# 1. 对比 schema 代码与已有迁移，生成新迁移 SQL 到 drizzle/ 目录
+DATABASE_URL="postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres" npm run db:generate
+
+# 2. 审查生成的 drizzle/*.sql（确认改动符合预期，无意外 DROP）
+git diff drizzle/
+
+# 3. 提交迁移文件后，在目标数据库应用
+DATABASE_URL="postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres" npx drizzle-kit migrate
+```
+
+> **回滚**：`push` 方式无原生回滚，变更前务必先备份（见「数据库备份」）；迁移文件方式可手动执行逆向 SQL（删除新表/列），或直接从备份恢复。
 
 ---
 
@@ -147,12 +232,30 @@ npx wrangler secret put DEEPSEEK_BASE_URL
 npx wrangler secret put JWT_SECRET
 # 输入: (openssl rand -base64 32 生成的随机字符串)
 
-npx wrangler secret put VITE_API_URL
-# 输入: 前端部署域名（仅在 Cloudflare Pages 中需要）
-
 npx wrangler secret put SERPAPI_API_KEY
 # 输入: (可选，按需配置)
+
+npx wrangler secret put EMBEDDING_PROVIDER
+# 输入: workers-ai（默认，生产推荐）/ dashscope（阿里云百炼）
+
+npx wrangler secret put BASE_SERVICE_URL
+# 输入: PDF 解析服务地址，如 https://your-domain.com:38080（上传 PDF 时需要）
+
+npx wrangler secret put BASE_SERVICE_KEY
+# 输入: base 服务 BASE_SERVICE_KEYS 中某组的 key（上传 PDF 时需要）
+
+npx wrangler secret put BASE_SERVICE_SECRET
+# 输入: 与上述 key 对应的 secret（上传 PDF 时需要）
+
+npx wrangler secret put PDF_ENCRYPTION_KEY
+# 输入: openssl rand -base64 32 生成的密钥（与 base 服务 PDF_ENCRYPTION_KEY 一致，可选；配置后 PDF 密文传输）
+
+npx wrangler secret put ALLOW_SIGNUP
+# 输入: true（开放公开注册）；不配置即默认关闭注册
 ```
+
+> **重要**：`wrangler.jsonc` 中的 `CHANGE_ME` 占位符（HYPERDRIVE / KV 的 id）必须在首次部署前全部替换为实际资源 id，否则部署会失败或无法连接。
+> `EMBEDDING_PROVIDER` 未显式配置时默认为 `workers-ai`，需要打开 `wrangler.jsonc` 中的 `"ai"` binding（见下）；若使用 `dashscope`，还需 `wrangler secret put DASHSCOPE_API_KEY`。
 
 ---
 
@@ -185,6 +288,8 @@ npm run deploy
 VITE_API_URL=https://api.your-domain.com
 ```
 
+> `VITE_API_URL` 是前端**构建时**变量（Vite 编译时注入浏览器），**不是 Worker secret**，无需 `wrangler secret put`。值 = 后端 Worker 公开地址（`*.workers.dev` 或自定义域名）。
+
 ### 5.2 手动部署到 Pages
 
 方式一：**wrangler pages deploy**
@@ -212,19 +317,15 @@ npx wrangler pages deploy dist --project-name agent-platform
 
 ### 5.4 更新后端 CORS
 
-部署前确保 `backend/src/index.ts` 的 CORS origin 包含了前端域名：
+后端 CORS 白名单通过 `CORS_ORIGINS` 环境变量（逗号分隔）覆盖，**不要**直接改 `backend/src/index.ts` 的默认值（其默认包含占位域名，仅本地开发用）：
 
-```ts
-app.use("*", cors({
-  origin: [
-    "http://localhost:5173",
-    "https://app.your-domain.com",     // ← 生产前端域名
-    "https://agent-platform.pages.dev",  // ← Pages 默认域名
-  ],
-  credentials: true,
-  // ...
-}));
+```bash
+cd backend
+npx wrangler secret put CORS_ORIGINS
+# 输入: https://app.your-domain.com,https://agent-platform.pages.dev
 ```
+
+> **重要**：默认白名单包含占位域名 `https://app.agent-platform.com`。若该域名不属于你，上线前必须用 `CORS_ORIGINS` 覆盖，否则存在跨源攻击面。
 
 修改后重新部署后端。
 
@@ -258,7 +359,15 @@ CI 流程：
 | `DEEPSEEK_API_KEY` | ✅ | DeepSeek API Key |
 | `DEEPSEEK_BASE_URL` | ✅ | `https://api.deepseek.com/v1` |
 | `JWT_SECRET` | ✅ | 随机密钥 (`openssl rand -base64 32`) |
-| `VITE_API_URL` | ✅ | 后端 Worker 域名，如 `https://api.your-domain.com` |
+| `EMBEDDING_PROVIDER` | 可选 | `workers-ai`（默认）/ `dashscope` / `mock`（仅本地调试） |
+| `DASHSCOPE_API_KEY` | 按需 | `EMBEDDING_PROVIDER=dashscope` 时必填 |
+| `DASHSCOPE_BASE_URL` | 可选 | DashScope 兼容地址（默认官方 `https://dashscope.aliyuncs.com/compatible-mode/v1`） |
+| `DASHSCOPE_EMBEDDING_MODEL` | 可选 | 默认 `text-embedding-v3`（1024 维，与 schema 匹配） |
+| `BASE_SERVICE_URL` | 按需 | PDF 解析服务地址（上传 PDF 时需要） |
+| `BASE_SERVICE_KEY` | 按需 | base 服务鉴权 key（HMAC 签名，对应 `BASE_SERVICE_KEYS` 中某组） |
+| `BASE_SERVICE_SECRET` | 按需 | base 服务鉴权 secret（与 key 对应，仅本地计算签名，不传输） |
+| `PDF_ENCRYPTION_KEY` | 可选 | 应用层加密密钥（base64 32 字节，与 base 服务一致，`openssl rand -base64 32`）；配置后 PDF 密文传输，否则明文 |
+| `ALLOW_SIGNUP` | 可选 | 注册开关，默认关闭；设 `true` 开放公开注册 |
 
 ### Cloudflare 绑定 (wrangler.jsonc)
 
@@ -267,6 +376,7 @@ CI 流程：
 | `HYPERDRIVE` | Hyperdrive | 连接 Supabase PostgreSQL（含 pgvector） |
 | `RATE_LIMIT_KV` | KV | 限流 |
 | `QUOTA_KV` | KV | 配额 |
+| `AI` | Workers AI | 嵌入（`EMBEDDING_PROVIDER=workers-ai` 时需要） |
 
 ---
 
@@ -279,6 +389,9 @@ CI 流程：
   "name": "agent-platform-api",
   "compatibility_date": "2026-07-28",
   "compatibility_flags": ["nodejs_compat"],
+  "triggers": {
+    "crons": ["0 */6 * * *"]
+  },
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
@@ -288,9 +401,14 @@ CI 流程：
   "kv_namespaces": [
     { "binding": "RATE_LIMIT_KV", "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" },
     { "binding": "QUOTA_KV",      "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }
-  ]
+  ],
+  "ai": { "binding": "AI" }
 }
 ```
+
+> `"triggers"` 是 cron 定时任务（每 6 小时回收超时处理中的知识库文档），部署后自动生效。
+> `"ai"` binding 仅在 `EMBEDDING_PROVIDER=workers-ai` 时需要；若用 `dashscope` 可省略。
+> `localConnectionString` 仅本地开发用，生产部署前应删除。
 
 ---
 
@@ -299,11 +417,14 @@ CI 流程：
 部署后验证以下功能：
 
 - [ ] `GET /api/health` 返回 `{"status":"healthy"}`
-- [ ] 登录/注册流程正常
+- [ ] 管理员账号登录正常（注册默认关闭；开放注册时 `/signup` 页显示表单且可注册）
 - [ ] Agent CRUD 正常
 - [ ] 流式对话（SSE）正常
 - [ ] 工具调用（搜索/网络请求）正常
 - [ ] 知识库上传 + RAG 检索正常
+- [ ] 上传 PDF 返回 202，随后文档状态变为 `ready`（文档列表含 `chunkCount`）
+- [ ] Agent 绑定知识库后，对话回答引用来源文件名
+- [ ] `wrangler tail` 可看到 `knowledge.*` 结构化指标日志
 - [ ] 自定义工具管理正常
 
 ---
@@ -316,9 +437,10 @@ CI 流程：
 - 若超限，考虑 `wrangler deploy --minify` 或升级 Paid Plan
 
 ### 2. PDF 解析
-- `pdf-parse` 依赖 Node.js Buffer API
-- 当前通过 `nodejs_compat` flag 提供兼容性
-- 如果出现问题，可替换为 `pdfjs-dist` 或 `@n1ru4l/pdf2text`
+- PDF 文本提取由独立 base 服务完成（Python FastAPI + PyMuPDF），Worker 通过 `BASE_SERVICE_URL` 调用
+- base 服务需配置 `BASE_SERVICE_KEYS` 并采用 HMAC-SHA256 请求签名鉴权（请求头 `X-Api-Key`/`X-Timestamp`/`X-Nonce`/`X-Signature`，`X-Api-Key` 仅标识、secret 不落公网），避免无鉴权暴露公网
+- Worker 端通过 `BASE_SERVICE_KEY` / `BASE_SERVICE_SECRET` 计算签名（见 `src/lib/ai/signature.ts`）
+- base 服务部署参见 [ecs-deployment.md](ecs-deployment.md)
 
 ### 3. SSE 流式输出
 - Cloudflare Workers 支持 ReadableStream
@@ -333,6 +455,30 @@ CI 流程：
 - Hyperdrive 是 Cloudflare 专有服务，迁移到其他平台需绕过它直接连接数据库
 
 ---
+
+## 数据库备份
+
+知识库数据（文档 + 向量分块）存储在 PostgreSQL，生产必须启用自动备份：
+
+- **Supabase**：项目自带每日自动备份 + 定时恢复点（PITR），在 Dashboard → Database → Backups 查看配置
+- **自建 PostgreSQL**：使用项目自带脚本 `backend/scripts/backup.sh`（pg_dump，含 pgvector 数据）：
+
+```bash
+cd backend
+DATABASE_URL="postgres://postgres:YOUR_PASSWORD@localhost:5432/agent_platform" ./scripts/backup.sh
+# 可选: BACKUP_DIR=/data/backups 指定目录（默认 ./backups）
+# 自动保留最近 7 天备份，建议配合 cron 每日执行，并同步到异地对象存储
+```
+
+### 恢复
+
+```bash
+# 从备份文件恢复到目标库（先确保目标库存在且启用 vector 扩展）
+psql "$DATABASE_URL" -c "CREATE EXTENSION IF NOT EXISTS vector;"
+psql "$DATABASE_URL" < backups/agent_platform_YYYYMMDD_HHMMSS.sql
+```
+
+> `pg_dump` 备份时使用了 `--no-owner --no-privileges`，恢复时属主/权限沿用目标库，避免跨库恢复报错。
 
 ## 回滚
 

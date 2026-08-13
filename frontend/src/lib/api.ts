@@ -1,56 +1,8 @@
-const API = import.meta.env.VITE_API_URL;
+import { fetchWithAuth, refreshAccessToken, setAccessToken } from "./fetch-with-auth";
 
-// 内存中保存 access token；refreshPromise 用于并发去重，避免多个请求同时刷新
-let accessToken: string | null = null;
-let refreshPromise: Promise<{ user: { id: string; name: string | null }; accessToken: string } | null> | null = null;
-
-export function getAccessToken() {
-  return accessToken;
-}
-
-// 通过 HttpOnly cookie 中的 refresh token 换取新的 access token
-async function doRefresh() {
-  // 若已有刷新请求进行中，直接复用同一 Promise
-  if (refreshPromise) return refreshPromise;
-  refreshPromise = (async () => {
-    try {
-      const res = await fetch(`${API}/api/auth/refresh`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      accessToken = data.accessToken;
-      return data;
-    } catch {
-      accessToken = null;
-      return null;
-    } finally {
-      refreshPromise = null;
-    }
-  })();
-  return refreshPromise;
-}
-
-// 统一请求封装：自动附带 Bearer token，401 时先刷新再重试一次
+// 统一 JSON 请求：复用 fetchWithAuth（含 401 刷新重试）
 async function request<T>(path: string, opts?: RequestInit): Promise<T> {
-  const buildFetch = (): Promise<Response> => {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
-    return fetch(`${API}${path}`, {
-      ...opts,
-      credentials: "include",
-      headers: { ...headers, ...(opts?.headers as Record<string, string>) },
-    });
-  };
-
-  let res = await buildFetch();
-  if (res.status === 401 && !path.startsWith("/api/auth/")) {
-    // access token 过期：刷新后重试原请求
-    const refreshed = await doRefresh();
-    if (refreshed) res = await buildFetch();
-  }
-
+  const res = await fetchWithAuth(path, opts);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || "请求失败");
@@ -61,12 +13,27 @@ async function request<T>(path: string, opts?: RequestInit): Promise<T> {
 export const api = {
   // Auth
   signUp: (body: { email: string; password: string; name: string }) =>
-    request<{ user: { id: string; name: string | null }; accessToken: string }>("/api/auth/sign-up/email", { method: "POST", body: JSON.stringify(body) }),
+    request<{ user: { id: string; name: string | null }; accessToken: string }>("/api/auth/sign-up/email", { method: "POST", body: JSON.stringify(body) })
+      .then((data) => {
+        setAccessToken(data.accessToken);
+        return data;
+      }),
   signIn: (body: { email: string; password: string }) =>
-    request<{ user: { id: string; name: string | null }; accessToken: string }>("/api/auth/sign-in/email", { method: "POST", body: JSON.stringify(body) }),
-  signOut: () => request<{ ok: boolean }>("/api/auth/sign-out", { method: "POST" }),
-  refresh: (): Promise<{ user: { id: string; name: string | null }; accessToken: string } | null> => doRefresh(),
-  getSession: () => request<{ user?: { id: string; name: string | null } | null }>("/api/auth/session"),
+    request<{ user: { id: string; name: string | null }; accessToken: string }>("/api/auth/sign-in/email", { method: "POST", body: JSON.stringify(body) })
+      .then((data) => {
+        setAccessToken(data.accessToken);
+        return data;
+      }),
+  signOut: async () => {
+    try {
+      await request<{ ok: boolean }>("/api/auth/sign-out", { method: "POST" });
+    } finally {
+      setAccessToken(null);
+    }
+  },
+  refresh: () => refreshAccessToken(),
+  // 公开配置（无需登录）：注册开关等
+  getAuthConfig: () => request<{ allowSignup: boolean }>("/api/auth/config"),
 
   // Agents
   getAgents: () => request<import("./types").Agent[]>("/api/agents"),
@@ -105,20 +72,17 @@ export const api = {
     request<import("./types").KnowledgeBase>("/api/knowledge", { method: "POST", body: JSON.stringify({ name }) }),
   deleteKnowledgeBase: (id: string) => request<{ ok: boolean }>(`/api/knowledge/${id}`, { method: "DELETE" }),
   getDocuments: (kbId: string) => request<import("./types").Document[]>(`/api/knowledge/${kbId}/documents`),
-  uploadDocument: (kbId: string, file: File) => {
-    // 文件上传需要 FormData，不使用 JSON 封装，单独处理
+  uploadDocument: async (kbId: string, file: File) => {
+    // 文件上传：FormData，复用 fetchWithAuth（含 401 刷新）
     const form = new FormData();
     form.append("file", file);
-    const headers: Record<string, string> = {};
-    if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
-    return fetch(`${API}/api/knowledge/${kbId}/documents`, {
-      method: "POST", credentials: "include", body: form, headers,
-    }).then((r) =>
-      r.json().then((data) => {
-        if (!r.ok) throw new Error(data.error || "上传失败");
-        return data as { id: string; filename: string; chunkCount: number; status: string };
-      })
-    );
+    const res = await fetchWithAuth(`/api/knowledge/${kbId}/documents`, {
+      method: "POST",
+      body: form,
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.error || "上传失败");
+    return data as { id: string; filename: string; chunkCount: number; status: string };
   },
   deleteDocument: (kbId: string, docId: string) =>
     request<{ ok: boolean }>(`/api/knowledge/${kbId}/documents/${docId}`, { method: "DELETE" }),

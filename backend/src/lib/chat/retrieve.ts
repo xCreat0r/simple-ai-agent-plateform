@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { retrieveContext } from "@/lib/ai/retriever";
 import { deduplicateChunks } from "@/lib/util/text";
 import { config } from "@/lib/config";
+import { wrapUntrusted } from "./untrusted";
 
 export async function injectKnowledgeContext(
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
@@ -26,11 +27,14 @@ export async function injectKnowledgeContext(
 
   if (chunks.length === 0) return;
 
-  // 将检索到的知识块拼成 system 提示注入，要求模型引用来源文件名
+  // 将检索到的知识块拼成 system 提示注入，要求模型引用来源文件名。
+  // 知识库文档同样视为不可信数据，整体包裹标签防止文档内恶意指令生效
   const contextBlock =
     "参考以下知识来回答用户问题，并在引用时注明来源文件名：\n\n" +
-    deduplicateChunks(chunks.map((c) => `[来源: ${c.filename}]\n${c.content}`))
-      .join("\n---\n");
+    wrapUntrusted(
+      deduplicateChunks(chunks.map((c) => `[来源: ${c.filename}]\n${c.content}`))
+        .join("\n---\n")
+    );
 
   if (messages[0]?.role === "system") {
     messages[0].content = messages[0].content + "\n\n" + contextBlock;

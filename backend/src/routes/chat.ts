@@ -4,7 +4,7 @@ import { stream } from "hono/streaming";
 import { getDb } from "@/lib/db";
 import { agents, agentTools, chats, messages } from "@/lib/db/schema";
 import { and, desc, eq, gt, inArray } from "drizzle-orm";
-import { getTool } from "@/lib/tools/db-tools";
+import { getToolDefinitions } from "@/lib/tools/db-tools";
 import { buildConversationMessages } from "@/lib/chat/build-context";
 import { injectKnowledgeContext } from "@/lib/chat/retrieve";
 import { runToolLoop } from "@/lib/chat/tool-loop";
@@ -105,11 +105,11 @@ chatRoutes.post("/", async (c) => {
     console.warn(`[chat] 知识检索失败，跳过知识注入: ${err instanceof Error ? err.message : "未知错误"}`);
   }
 
-  // 收集该 agent 启用的工具定义，供 LLM 选择调用
-  const enabledTools = await Promise.all(enabledToolIds.map((id) => getTool(id)));
-  const toolDefs = enabledTools.filter(Boolean).map((t) => ({
+  // 收集该 agent 启用的工具定义，供 LLM 选择调用（批量查询，避免 N+1）
+  const enabledToolDefs = await getToolDefinitions(enabledToolIds);
+  const toolDefs = enabledToolDefs.map((t) => ({
     type: "function" as const,
-    function: { name: t!.id, description: t!.description, parameters: t!.parameters },
+    function: { name: t.id, description: t.description, parameters: t.parameters },
   }));
 
   // 以 SSE 流式返回：ReadableStream 生产数据，runToolLoop 异步执行工具循环
@@ -124,7 +124,8 @@ chatRoutes.post("/", async (c) => {
           // 新对话在首个回复完成后异步生成标题（失败不影响主流程）
           if (isNewChat) await generateChatTitle(chatId, agent.id, agent.model, userQuery);
         }).catch((err) => {
-          controller.enqueue(encoder.encode(`\n\n错误: ${err.message}\n\n`));
+          // 错误以明确标记注入流，前端据此展示独立错误消息（不混入正文）
+          controller.enqueue(encoder.encode(`\n\n[error] ${err.message}[/error]\n\n`));
           controller.error(err);
         });
       },

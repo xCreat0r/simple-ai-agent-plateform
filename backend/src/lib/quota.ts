@@ -1,7 +1,8 @@
 import { getDb } from "@/lib/db";
-import { chats, knowledgeBases, knowledgeDocuments } from "@/lib/db/schema";
-import { sql, eq, and, gte } from "drizzle-orm";
+import { knowledgeBases, knowledgeDocuments } from "@/lib/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { config } from "@/lib/config";
+import { getCloudflareContext } from "@/lib/env-holder";
 
 export interface Plan {
   name: string;
@@ -28,23 +29,25 @@ export function getPlan(_userId: string): Plan {
 
 export async function checkQuota(userId: string): Promise<{ allowed: boolean; reason?: string; current: number; limit: number }> {
   const plan = getPlan(userId);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const kv = getCloudflareContext().env.QUOTA_KV;
 
-  // 统计该用户今天创建的对话数（通过 agents 表关联，保证只统计自己的数据）
-  const [result] = await getDb()
-    .select({ count: sql<number>`count(*)` })
-    .from(chats)
-    .innerJoin(
-      sql`(SELECT id FROM agents WHERE agents.user_id = ${userId}) AS user_agents`,
-      sql`chats.agent_id = user_agents.id`
-    )
-    .where(gte(chats.createdAt, today));
+  // 无 KV 绑定（异常环境）时放行，避免阻断主流程
+  if (!kv) {
+    return { allowed: true, current: 0, limit: plan.dailyRequests };
+  }
 
-  const current = Number(result?.count ?? 0);
-  const allowed = current < plan.dailyRequests;
+  // 按天计数真实请求次数：键 = 用户 + 日期，TTL 两天确保跨日安全
+  const dayKey = new Date().toISOString().slice(0, 10);
+  const kvKey = `quota:${userId}:${dayKey}`;
+  const currentRaw = await kv.get(kvKey);
+  const current = currentRaw ? parseInt(currentRaw, 10) : 0;
 
-  return { allowed, current, limit: plan.dailyRequests, reason: allowed ? undefined : `今日已用 ${current}/${plan.dailyRequests} 次` };
+  if (current >= plan.dailyRequests) {
+    return { allowed: false, current, limit: plan.dailyRequests, reason: `今日已用 ${current}/${plan.dailyRequests} 次` };
+  }
+
+  await kv.put(kvKey, String(current + 1), { expirationTtl: 2 * 24 * 3600 });
+  return { allowed: true, current: current + 1, limit: plan.dailyRequests, reason: undefined };
 }
 
 export async function checkKnowledgeStorage(userId: string, additionalBytes = 0): Promise<{ allowed: boolean; reason?: string; current: number; limit: number }> {

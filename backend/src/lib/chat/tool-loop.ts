@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { messages as messagesTable } from "@/lib/db/schema";
 import { getTool } from "@/lib/tools/db-tools";
 import { generateId } from "@/lib/util/uuid";
+import { wrapUntrusted } from "./untrusted";
 
 interface ToolDef {
   type: "function";
@@ -96,7 +97,7 @@ export async function runToolLoop(
         chatId,
         role: "assistant",
         content: stepContent || "",
-        toolCalls: JSON.stringify(toolCallsForDb),
+        toolCalls: toolCallsForDb,
         createdAt: now,
       });
 
@@ -129,7 +130,12 @@ export async function runToolLoop(
             args = JSON.parse(tc.arguments);
           } catch {}
 
-          toolResult = await tool.execute(args);
+          try {
+            toolResult = await tool.execute(args);
+          } catch (err) {
+            // 工具执行异常隔离：转成 tool 消息返回模型，让其纠错继续，不中断整场对话
+            toolResult = `工具执行失败: ${err instanceof Error ? err.message : "未知错误"}`;
+          }
         }
 
         controller.enqueue(encoder.encode(`> ✅ ${tc.name} 完成\n\n`));
@@ -139,13 +145,14 @@ export async function runToolLoop(
           chatId,
           role: "tool",
           content: toolResult,
-          toolResult: JSON.stringify({ toolCallId: tc.id, content: toolResult }),
+          toolResult: { toolCallId: tc.id, content: toolResult },
           createdAt: new Date(),
         });
 
+        // 落库存原始内容，仅传给模型时包裹不可信标签，前端历史展示保持干净
         currentMessages.push({
           role: "tool",
-          content: toolResult,
+          content: wrapUntrusted(toolResult),
           tool_call_id: tc.id,
         });
       }

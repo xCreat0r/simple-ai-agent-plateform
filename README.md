@@ -84,9 +84,19 @@ npm run dev
 
 ### 首次使用
 
-1. 打开 `http://localhost:5173/signup` 注册管理员账号
-2. 点击「新建」创建第一个 Agent：填写名称、系统提示词，勾选需要的工具
-3. 点击 Agent 进入聊天页面，发送消息开始对话
+1. 创建管理员账号（注册默认关闭，需初始化账号）：
+
+   ```bash
+   cd backend
+   DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/agent_platform \
+     SEED_EMAIL=admin@example.com SEED_PASSWORD=your-password npm run db:seed
+   # 支持 SEED_EMAIL / SEED_PASSWORD / SEED_NAME（默认 管理员 / admin@example.com / changeme123）
+   ```
+
+   若需开放公开注册，在 `.env.local` 设 `ALLOW_SIGNUP=true` 后重启。
+2. 打开 `http://localhost:5173/login` 登录管理员账号
+3. 点击「新建」创建第一个 Agent：填写名称、系统提示词，勾选需要的工具
+4. 点击 Agent 进入聊天页面，发送消息开始对话
 
 ## Project Structure
 
@@ -218,6 +228,7 @@ DASHSCOPE_EMBEDDING_MODEL=text-embedding-v3       # 1024 维，与数据库 sche
 
 # Auth
 JWT_SECRET=                                     # openssl rand -base64 32 生成的签名密钥
+# ALLOW_SIGNUP=true                             # 注册开关，默认关闭（未配置即禁止注册，用 npm run db:seed 创建账号）
 VITE_API_URL=http://localhost:8787               # 前端 API 地址（frontend/.env）
 ```
 

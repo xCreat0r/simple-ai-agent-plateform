@@ -2,15 +2,18 @@ import { Hono } from "hono";
 import type { Env } from "./_middleware";
 import { getDb, withDb } from "@/lib/db";
 import { knowledgeBases, knowledgeDocuments, knowledgeChunks } from "@/lib/db/schema";
-import { eq, desc, and, asc, inArray, sql } from "drizzle-orm";
+import { eq, desc, and, asc, inArray, sql, lt } from "drizzle-orm";
 import { splitText } from "@/lib/ai/chunker";
 import { generateEmbeddings } from "@/lib/ai/embedding";
+import { signBaseRequest } from "@/lib/ai/signature";
+import { getPdfEncryptionKey, encryptPdf } from "@/lib/ai/encrypt";
 import { generateId } from "@/lib/util/uuid";
 import { getCloudflareContext, getHyperdriveConnectionString } from "@/lib/env-holder";
 import { config } from "@/lib/config";
 import { checkKnowledgeStorage } from "@/lib/quota";
 import { deduplicateChunks } from "@/lib/util/text";
 import { decodeTextBuffer } from "@/lib/util/encoding";
+import { logger } from "@/lib/logger";
 
 
 const knowledgeRoutes = new Hono<Env>();
@@ -147,6 +150,9 @@ knowledgeRoutes.post("/:id/documents", async (c) => {
   });
 
   const chunks = splitText(text);
+  logger.metric("knowledge.document_uploaded", {
+    docId, kbId: id, filename: file.name, sizeBytes: file.size, ext, chunks: chunks.length,
+  });
   // waitUntil 让 embedding 在响应返回后继续执行（Cloudflare 后台任务）。
   // 后台任务运行在请求上下文之外，需用独立连接执行。
   const connString = getHyperdriveConnectionString();
@@ -200,7 +206,18 @@ knowledgeRoutes.get("/:id/documents/:docId/content", async (c) => {
 async function processEmbedding(docId: string, kbId: string, chunks: string[], createdAt: Date): Promise<void> {
   const db = getDb();
   const batchSize = config.knowledge.embeddingBatchSize;
+  const provider = process.env.EMBEDDING_PROVIDER || "workers-ai";
+  const startedAt = Date.now();
   try {
+    // 文档可能在排队期间被删除，先确认仍存在，避免空跑撞外键
+    const [doc] = await db
+      .select({ id: knowledgeDocuments.id })
+      .from(knowledgeDocuments)
+      .where(eq(knowledgeDocuments.id, docId));
+    if (!doc) {
+      logger.warn(`[embedding] 文档 ${docId} 已被删除，跳过嵌入`);
+      return;
+    }
     // 分批生成嵌入并落库，避免一次性请求过多文本
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batch = chunks.slice(i, i + batchSize);
@@ -220,13 +237,37 @@ async function processEmbedding(docId: string, kbId: string, chunks: string[], c
     await db.update(knowledgeDocuments)
       .set({ status: "ready" })
       .where(eq(knowledgeDocuments.id, docId));
+    logger.metric("knowledge.embedding_success", {
+      docId, kbId, chunks: chunks.length, elapsedMs: Date.now() - startedAt, provider,
+    });
   } catch (err) {
     // 任一环节失败则标记 failed 并记录错误信息，供前端展示
     const message = err instanceof Error ? err.message : "未知错误";
     await db.update(knowledgeDocuments)
       .set({ status: "failed", error: message })
       .where(eq(knowledgeDocuments.id, docId));
+    logger.metric("knowledge.embedding_failed", {
+      docId, kbId, error: message, elapsedMs: Date.now() - startedAt, provider,
+    });
   }
+}
+
+// 回收超时卡在 processing 的文档（由 scheduled cron 触发）。
+// 返回被标记为 failed 的文档数量；超时阈值默认 30 分钟。
+export async function recoverStaleProcessingDocs(timeoutMs = 30 * 60 * 1000): Promise<number> {
+  const db = getDb();
+  const cutoff = new Date(Date.now() - timeoutMs);
+  const stale = await db
+    .select({ id: knowledgeDocuments.id })
+    .from(knowledgeDocuments)
+    .where(and(eq(knowledgeDocuments.status, "processing"), lt(knowledgeDocuments.createdAt, cutoff)));
+  if (stale.length === 0) return 0;
+
+  const ids = stale.map((s) => s.id);
+  await db.update(knowledgeDocuments)
+    .set({ status: "failed", error: "处理超时，请删除后重新上传" })
+    .where(inArray(knowledgeDocuments.id, ids));
+  return ids.length;
 }
 
 async function parsePdf(arrBuf: ArrayBuffer): Promise<string> {
@@ -234,11 +275,25 @@ async function parsePdf(arrBuf: ArrayBuffer): Promise<string> {
   const baseUrl = env.BASE_SERVICE_URL;
   if (!baseUrl) throw new Error("未配置 BASE_SERVICE_URL");
 
-  // 将 PDF 原始字节转发给 Python base 服务解析文本
+  // 应用层加密：配置 PDF_ENCRYPTION_KEY 时对 PDF 字节做 AES-GCM 加密后再传输，
+  // 防止公网链路明文嗅探；未配置则按明文（兼容/回滚）
+  const encryptionKey = getPdfEncryptionKey();
+  const payload = encryptionKey ? await encryptPdf(arrBuf, encryptionKey) : arrBuf;
+
+  // HMAC 请求签名：对实际传输的 payload（密文或明文）签名，与 base 验签一致
+  const { key, timestamp, nonce, signature } = await signBaseRequest(payload, "/doc-parser/parse");
+
+  // 将 PDF 原始字节（或加密后的密文）转发给 Python base 服务解析文本
   const res = await fetch(`${baseUrl}/doc-parser/parse`, {
     method: "POST",
-    headers: { "Content-Type": "application/pdf" },
-    body: arrBuf,
+    headers: {
+      "Content-Type": "application/pdf",
+      "X-Api-Key": key,
+      "X-Timestamp": timestamp,
+      "X-Nonce": nonce,
+      "X-Signature": signature,
+    },
+    body: payload,
   });
   if (!res.ok) {
     throw new Error(`PDF 解析服务返回 ${res.status}: ${await res.text()}`);

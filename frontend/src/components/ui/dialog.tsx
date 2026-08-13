@@ -18,10 +18,6 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
   );
 }
 
-function DialogTrigger({ children }: { children: ReactNode }) {
-  return <BaseDialog.Trigger>{children}</BaseDialog.Trigger>;
-}
-
 function DialogContent({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <BaseDialog.Portal>
@@ -62,4 +58,4 @@ function DialogClose({ children }: { children: ReactNode }) {
   return <BaseDialog.Close render={<Button variant="outline" />}>{children}</BaseDialog.Close>;
 }
 
-export { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose };
+export { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose };

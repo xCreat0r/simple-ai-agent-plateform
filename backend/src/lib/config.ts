@@ -5,6 +5,12 @@ function numEnv(name: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+export function boolEnv(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  return raw.trim().toLowerCase() === "true";
+}
+
 export const config = {
   chat: {
     maxContentLength: numEnv("CHAT_MAX_CONTENT_LENGTH", 4000),
@@ -15,6 +21,13 @@ export const config = {
   rateLimit: {
     windowMs: numEnv("RATE_LIMIT_WINDOW_MS", 60_000),
     maxRequestsPerWindow: numEnv("RATE_LIMIT_MAX_REQUESTS_PER_WINDOW", 30),
+  },
+
+  auth: {
+    // 是否开放注册：默认关闭，仅当显式配置 ALLOW_SIGNUP=true 时开放。
+    // 关闭时需通过 seed 脚本或 SQL 创建账号
+    allowSignup: boolEnv("ALLOW_SIGNUP", false),
+    minPasswordLength: numEnv("AUTH_MIN_PASSWORD_LENGTH", 8),
   },
 
   ai: {

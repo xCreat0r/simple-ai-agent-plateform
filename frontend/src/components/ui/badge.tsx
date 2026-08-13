@@ -17,8 +17,6 @@ const badgeVariants = cva(
   }
 );
 
-export { badgeVariants };
-
 interface BadgeProps extends HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
 
 function Badge({ className, variant, ...props }: BadgeProps) {

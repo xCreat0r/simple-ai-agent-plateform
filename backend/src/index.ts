@@ -12,6 +12,12 @@ import type { Env } from "./routes/_middleware";
 
 const app = new Hono<{ Bindings: CloudflareEnv }>();
 
+// CORS 白名单：CORS_ORIGINS（逗号分隔）环境变量覆盖，默认本地 + 预设生产域名
+const CORS_ORIGINS = (process.env.CORS_ORIGINS || "http://localhost:5173,https://app.agent-platform.com")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 // 全局错误处理：统一格式化错误响应，认证错误返回 401，其余返回 500
 app.onError((err, c) => {
   console.error("[ERROR]", err.name, err.message);
@@ -33,7 +39,7 @@ app.use("*", async (c, next) => {
 });
 
 app.use("*", cors({
-  origin: ["http://localhost:5173", "https://app.agent-platform.com"],
+  origin: CORS_ORIGINS,
   credentials: true,
   allowHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"],
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -58,51 +64,79 @@ app.route("/api", protectedRoutes);
 // 包装 fetch：请求入口创建连接，响应 body 流结束后关闭连接。
 // 流式响应（/api/chat）期间连接保持可用，直至流写完。
 async function handleRequest(request: Request, env: CloudflareEnv, ctx: ExecutionContext): Promise<Response> {
-  const { withDb } = await import("@/lib/db");
-  const { getHyperdriveConnectionString } = await import("@/lib/env-holder");
-  const connectionString = getHyperdriveConnectionString();
+  try {
+    const { withDb } = await import("@/lib/db");
+    const { getHyperdriveConnectionString } = await import("@/lib/env-holder");
+    const connectionString = getHyperdriveConnectionString();
 
-  if (!connectionString) {
-    return await app.fetch(request, env, ctx);
-  }
+    if (!connectionString) {
+      return await app.fetch(request, env, ctx);
+    }
 
-  const { result: res, close } = await withDb(connectionString, async () => await app.fetch(request, env, ctx));
+    const { result: res, close } = await withDb(connectionString, async () => await app.fetch(request, env, ctx));
 
-  if (!res || !res.body) {
-    await close().catch(() => {});
-    return res;
-  }
+    if (!res || !res.body) {
+      await close().catch(() => {});
+      return res;
+    }
 
-  const reader = res.body.getReader();
-  const stream = new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      try {
-        const { done, value } = await reader.read();
-        if (done) {
-          controller.close();
+    const reader = res.body.getReader();
+    const stream = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            await close().catch(() => {});
+            return;
+          }
+          controller.enqueue(value);
+        } catch (err) {
+          controller.error(err);
           await close().catch(() => {});
-          return;
         }
-        controller.enqueue(value);
-      } catch (err) {
-        controller.error(err);
-        await close().catch(() => {});
-      }
-    },
-    cancel() {
-      reader.cancel();
-      close().catch(() => {});
-    },
-  });
+      },
+      cancel() {
+        reader.cancel();
+        close().catch(() => {});
+      },
+    });
 
-  return new Response(stream, {
-    status: res.status,
-    statusText: res.statusText,
-    headers: res.headers,
+    return new Response(stream, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: res.headers,
+    });
+  } catch (err) {
+    // 数据库建连/初始化等发生在 Hono onError 之外的异常，统一为 JSON 500
+    console.error("[ERROR] 请求处理失败", err);
+    return new Response(JSON.stringify({ error: "服务器内部错误" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
+
+// scheduled 事件（cron）：无请求上下文，需先注入 env 并单独建立 DB 连接，
+// 用于回收超时卡在 processing 的知识库文档（见 knowledge.ts recoverStaleProcessingDocs）
+async function handleScheduled(env: CloudflareEnv): Promise<void> {
+  const { setEnv, getHyperdriveConnectionString } = await import("@/lib/env-holder");
+  setEnv(env);
+  const { withDb } = await import("@/lib/db");
+  const connectionString = getHyperdriveConnectionString();
+  if (!connectionString) return;
+
+  await withDb(connectionString, async () => {
+    const { recoverStaleProcessingDocs } = await import("@/routes/knowledge");
+    const recovered = await recoverStaleProcessingDocs();
+    if (recovered > 0) console.log(`[cron] 回收 ${recovered} 个超时处理中的文档`);
   });
 }
 
 export default {
   fetch: handleRequest,
+  scheduled(_controller, env) {
+    return handleScheduled(env);
+  },
 } satisfies ExportedHandler<CloudflareEnv, unknown, unknown>;
 

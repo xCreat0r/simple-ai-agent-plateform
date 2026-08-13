@@ -21,9 +21,16 @@ export function AgentDetail() {
   const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
 
   const { data: agent } = useQuery({ queryKey: ["agent", agentId], queryFn: () => api.getAgent(agentId!), enabled: !!agentId });
-  const { data: chats } = useQuery({ queryKey: ["chats", agentId], queryFn: () => api.getChats(agentId!), enabled: !!agentId });
+  const { data: chats, isError: chatsError } = useQuery({ queryKey: ["chats", agentId], queryFn: () => api.getChats(agentId!), enabled: !!agentId });
 
-  const { messages, streamingContent, sendMessage, stopGeneration, isLoading } = useChat(agentId!, activeChatId);
+  const { messages, streamingContent, sendMessage, stopGeneration, isLoading, regenerate } = useChat(agentId!, activeChatId);
+
+  // 流式结束后刷新对话列表，让异步生成的标题及时显示
+  useEffect(() => {
+    if (!isLoading) {
+      queryClient.invalidateQueries({ queryKey: ["chats", agentId] });
+    }
+  }, [isLoading, agentId, queryClient]);
 
   const createChatMutation = useMutation({
     mutationFn: () => api.createChat({ agentId: agentId! }),
@@ -61,7 +68,9 @@ export function AgentDetail() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-2">
-          {!chats || chats.length === 0 ? (
+          {chatsError ? (
+            <div className="py-8 text-center text-sm text-neutral-400">加载失败</div>
+          ) : !chats || chats.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-sm text-neutral-400 gap-2">
               <MessageCircle className="h-8 w-8" />
               <span>暂无对话</span>
@@ -77,7 +86,7 @@ export function AgentDetail() {
                   <span className="truncate">{chat.title || "新对话"}</span>
                   <button
                     onClick={(e: React.MouseEvent) => { e.stopPropagation(); setDeleteChatId(chat.id); }}
-                    className="hidden shrink-0 text-neutral-400 hover:text-red-600 group-hover:block"
+                    className="hidden shrink-0 text-neutral-400 hover:text-red-600 group-hover:block focus-visible:block"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -104,8 +113,8 @@ export function AgentDetail() {
           />
         ) : (
           <>
-            <ChatMessages messages={messages} streamingContent={streamingContent} />
-            <ChatInput onSend={sendMessage} onStop={stopGeneration} loading={isLoading} />
+            <ChatMessages messages={messages} streamingContent={streamingContent} onRegenerate={regenerate} />
+            <ChatInput key={activeChatId} onSend={sendMessage} onStop={stopGeneration} loading={isLoading} />
           </>
         )}
       </div>

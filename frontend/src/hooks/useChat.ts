@@ -1,34 +1,23 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { api, getAccessToken } from "@/lib/api";
+import { fetchWithAuth } from "@/lib/fetch-with-auth";
+import { api } from "@/lib/api";
 import type { Message } from "@/lib/types";
-
-const API = import.meta.env.VITE_API_URL || "http://localhost:8787";
-
-// 构造带认证头的流式请求；401 时刷新 token 重试一次
-async function fetchWithAuth(path: string, init: RequestInit): Promise<Response> {
-  const build = (): Promise<Response> => {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    const token = getAccessToken();
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    return fetch(`${API}${path}`, { ...init, headers: { ...headers, ...(init.headers as Record<string, string>) } });
-  };
-
-  let res = await build();
-  if (res.status === 401) {
-    const refreshed = await api.refresh();
-    if (refreshed) res = await build();
-  }
-  return res;
-}
 
 export function useChat(agentId: string, chatId: string | undefined) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingContent, setStreamingContent] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  // 记录当前会话 id，流式期间据此判断会话是否已切换，避免跨会话污染
+  const chatIdRef = useRef<string | undefined>(chatId);
 
-  // 切换会话时重新加载历史消息
+  // 切换会话时重新加载历史消息；cleanup 中止旧流并丢弃过期响应
   useEffect(() => {
+    chatIdRef.current = chatId;
+    let cancelled = false;
+    abortRef.current?.abort();
+    abortRef.current = null;
+
     if (!chatId) {
       setMessages([]);
       setStreamingContent("");
@@ -36,41 +25,50 @@ export function useChat(agentId: string, chatId: string | undefined) {
     }
     setIsLoading(false);
     setStreamingContent("");
-    api.getMessages(chatId).then((res: { messages: Message[] }) => {
-      setMessages(res.messages);
-    }).catch(() => {
-      setMessages([]);
-    });
+    api.getMessages(chatId)
+      .then((res: { messages: Message[] }) => {
+        if (!cancelled) setMessages(res.messages);
+      })
+      .catch(() => {
+        if (!cancelled) setMessages([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [chatId]);
 
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (content: string, opts?: { regenerate?: boolean }) => {
     if (!chatId || !content.trim()) return;
+    const sendingChatId = chatId;
 
-    // 先本地渲染用户消息，再发起流式请求
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      chatId,
-      role: "user",
-      content,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
+    // regenerate 模式下用户消息已在历史中，不再重复追加
+    if (!opts?.regenerate) {
+      const userMsg: Message = {
+        id: crypto.randomUUID(),
+        chatId,
+        role: "user",
+        content,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+    }
     setIsLoading(true);
     setStreamingContent("");
 
     // 保存 AbortController 用于"停止生成"
     const abortController = new AbortController();
     abortRef.current = abortController;
+    let streamText = "";
 
     try {
       const response = await fetchWithAuth("/api/chat", {
         method: "POST",
-        body: JSON.stringify({ agentId, chatId, content }),
+        body: JSON.stringify({ agentId, chatId, content, regenerate: opts?.regenerate ?? false }),
         signal: abortController.signal,
       });
 
       if (!response.ok) {
-        // 读取后端错误信息（如对话不存在/配额不足），展示给用户
         const data = await response.json().catch(() => null);
         throw new Error(data?.error || "请求失败");
       }
@@ -80,9 +78,13 @@ export function useChat(agentId: string, chatId: string | undefined) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
-      let streamText = "";
 
       while (!done) {
+        // 会话已切换：中止本次流式更新，避免消息追加到新会话
+        if (chatIdRef.current !== sendingChatId) {
+          abortController.abort();
+          break;
+        }
         const { value, done: doneReading } = await reader.read();
         done = doneReading;
         if (value) {
@@ -90,6 +92,25 @@ export function useChat(agentId: string, chatId: string | undefined) {
           streamText += text;
           setStreamingContent(streamText);
         }
+      }
+
+      if (chatIdRef.current !== sendingChatId) return;
+
+      // 后端错误以 [error]...[/error] 标记注入流，解析后作为独立错误消息展示
+      const errorMatch = streamText.match(/\[error\]([\s\S]*?)\[\/error\]/);
+      if (errorMatch) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            chatId,
+            role: "assistant",
+            content: `⚠️ ${errorMatch[1].trim()}`,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+        setStreamingContent("");
+        return;
       }
 
       // 流结束后把完整回复作为正式消息加入列表
@@ -103,12 +124,24 @@ export function useChat(agentId: string, chatId: string | undefined) {
       setMessages((prev) => [...prev, assistantMsg]);
       setStreamingContent("");
     } catch (err) {
-      // 用户主动停止生成时静默退出，不做错误提示
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      // 展示错误信息（如对话不存在），并移除本地预渲染的用户消息
-      const message = err instanceof Error ? err.message : "发送失败";
-      setStreamingContent(`\n\n⚠️ ${message}\n\n`);
-      setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+      if (chatIdRef.current !== sendingChatId) return;
+      // 用户主动停止生成时静默退出
+      if (err instanceof Error && err.name === "AbortError") return;
+      // 后端错误以 [error] 标记注入流（controller.error 前已 enqueue），优先解析该标记
+      const errorMatch = streamText.match(/\[error\]([\s\S]*?)\[\/error\]/);
+      const message = errorMatch ? errorMatch[1].trim() : (err instanceof Error ? err.message : "发送失败");
+      // 错误展示为独立 assistant 消息，保留用户消息
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          chatId,
+          role: "assistant",
+          content: `⚠️ ${message}`,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      setStreamingContent("");
       console.error("Stream error:", err);
     } finally {
       setIsLoading(false);
@@ -121,12 +154,14 @@ export function useChat(agentId: string, chatId: string | undefined) {
     abortRef.current?.abort();
   }, []);
 
-  const regenerate = useCallback(async () => {
-    // 重新生成：找到最后一条用户消息，移除末尾 assistant 回复后重发
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-    if (!lastUserMsg) return;
-    setMessages((prev) => prev.filter((m) => m.id !== messages[messages.length - 1]?.id || m.role !== "assistant"));
-    await sendMessage(lastUserMsg.content);
+  // 重新生成：找到最后一条用户消息，删除其后所有消息后重发（后端 regenerate 模式）
+  const regenerate = useCallback(() => {
+    const lastUserIdx = [...messages].reverse().findIndex((m) => m.role === "user");
+    if (lastUserIdx < 0) return;
+    const idx = messages.length - 1 - lastUserIdx;
+    const lastUserMsg = messages[idx];
+    setMessages((prev) => prev.slice(0, idx + 1));
+    sendMessage(lastUserMsg.content, { regenerate: true });
   }, [messages, sendMessage]);
 
   return { messages, streamingContent, sendMessage, stopGeneration, isLoading, regenerate };

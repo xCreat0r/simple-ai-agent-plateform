@@ -524,11 +524,13 @@ sequenceDiagram
 | `DEEPSEEK_BASE_URL` | 可选 | DeepSeek API 地址（默认 `https://api.deepseek.com/v1`） |
 | `JWT_SECRET` | ✅ | access token 签名密钥 (`openssl rand -base64 32`) |
 | `SERPAPI_API_KEY` | 可选 | 网页搜索（不配则工具不可用） |
-| `EMBEDDING_PROVIDER` | 可选 | 嵌入服务：`workers-ai`（默认）/ `dashscope` / `mock` |
+| `EMBEDDING_PROVIDER` | 可选 | 嵌入服务：`workers-ai`（默认）/ `dashscope` / `mock`（仅本地调试；失败不再自动降级，生产失败即标记文档 failed） |
 | `DASHSCOPE_API_KEY` | 按需 | 阿里云百炼 Key（`EMBEDDING_PROVIDER=dashscope` 时需要） |
 | `DASHSCOPE_BASE_URL` | 可选 | DashScope 兼容地址（默认官方） |
 | `DASHSCOPE_EMBEDDING_MODEL` | 可选 | 默认 `text-embedding-v3`（1024 维，与 schema 匹配） |
 | `BASE_SERVICE_URL` | 按需 | PDF 解析 base 服务地址（上传 PDF 时需要） |
+| `BASE_SERVICE_KEY` | 按需 | base 服务鉴权 key（HMAC 签名，对应 base `BASE_SERVICE_KEYS` 中某组） |
+| `BASE_SERVICE_SECRET` | 按需 | base 服务鉴权 secret（与 key 对应，仅本地计算签名，不落公网） |
 | `DATABASE_URL` | 本地开发 | 本地 PostgreSQL 连接串（生产用 Hyperdrive） |
 
 知识库检索参数（可选，见 `src/lib/config.ts`）：`KNOWLEDGE_TOP_K`、`KNOWLEDGE_SIMILARITY_THRESHOLD`（cosine **距离**阈值，越小越严格）、`KNOWLEDGE_CHUNK_MAX_CHARS` / `MIN_CHARS` / `OVERLAP`、`KNOWLEDGE_EMBEDDING_BATCH_SIZE`、`KNOWLEDGE_MAX_FILE_SIZE`。配额与限流参数：`QUOTA_FREE_*`、`RATE_LIMIT_*`。
@@ -536,8 +538,11 @@ sequenceDiagram
 Cloudflare 绑定（通过 `wrangler.jsonc` 配置，非环境变量）：
 - `HYPERDRIVE` — 连接 PostgreSQL（含 pgvector）
 - `RATE_LIMIT_KV` — 限流 KV
-- `QUOTA_KV` — 配额 KV（当前配额实际通过 DB 统计，绑定保留待用）
+- `QUOTA_KV` — 配额 KV（按天计数真实请求次数）
 - `AI` — Workers AI 嵌入（`EMBEDDING_PROVIDER=workers-ai` 时需要）
+
+Cron 触发器（`wrangler.jsonc` `triggers`）：
+- `0 */6 * * *` — 每 6 小时回收超时（>30 分钟）卡在 `processing` 的知识库文档，标记为 `failed`（见 `recoverStaleProcessingDocs`）
 
 ---
 

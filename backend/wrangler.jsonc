@@ -1,30 +1,35 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "main": "src/index.ts",
-  "name": "agent-platform-api",
-  "compatibility_date": "2026-07-28",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
-  // 嵌入服务使用 EMBEDDING_PROVIDER 环境变量切换（workers-ai / dashscope / mock）。
-  // 本地开发（wrangler dev）不支持 AI binding，请用 dashscope 或 mock。
-  // 生产若要使用 Cloudflare Workers AI，在此处取消注释并执行 wrangler deploy：
-  // "ai": { "binding": "AI" },
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "CHANGE_ME",
-      "localConnectionString": "postgres://postgres:postgres@localhost:5432/agent_platform"
-    }
-  ],
-  "kv_namespaces": [
-    {
-      "binding": "RATE_LIMIT_KV",
-      "id": "CHANGE_ME"
-    },
-    {
-      "binding": "QUOTA_KV",
-      "id": "CHANGE_ME"
-    }
-  ]
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"main": "src/index.ts",
+	"name": "agent-platform-api",
+	"compatibility_date": "2026-07-28",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"triggers": {
+		"crons": [
+			"0 */6 * * *"
+		]
+	},
+	// 嵌入服务使用 EMBEDDING_PROVIDER 环境变量切换（workers-ai / dashscope / mock）。
+	// 本地开发（wrangler dev）不支持 AI binding，请用 dashscope 或 mock。
+	// 生产若要使用 Cloudflare Workers AI，在此处取消注释并执行 wrangler deploy：
+	// "ai": { "binding": "AI" },
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "14b841f1b4c74b2ab07b35d99892ea1f",
+			"localConnectionString": "postgres://postgres:postgres@localhost:5432/agent_platform"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "RATE_LIMIT_KV",
+			"id": "88eff2c4e20a443c9feb8ee1a4bbb4d9"
+		},
+		{
+			"binding": "QUOTA_KV",
+			"id": "63f935a10b4d47b9b92de58aad87089a"
+		}
+	]
 }

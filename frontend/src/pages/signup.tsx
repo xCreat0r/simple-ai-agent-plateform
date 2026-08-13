@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,10 @@ export function Signup() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { signUp } = useAuth();
+  const { signUp, user, allowSignup } = useAuth();
+
+  // 已登录用户访问注册页直接跳转
+  if (user) return <Navigate to="/agents" replace />;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +39,12 @@ export function Signup() {
           <Bot className="h-8 w-8 text-neutral-900" />
           <h1 className="text-2xl font-bold text-neutral-900">注册</h1>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {allowSignup === false ? (
+          <div className="rounded-md border border-neutral-200 bg-neutral-100 px-4 py-6 text-center">
+            <p className="text-sm text-neutral-600">注册已关闭，请联系管理员创建账号</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">名称</Label>
             <Input id="name" placeholder="请输入名称" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -47,11 +55,12 @@ export function Signup() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">密码</Label>
-            <Input id="password" type="password" placeholder="请输入密码" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <Input id="password" type="password" placeholder="请输入密码（至少 8 位）" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <Button type="submit" className="w-full" disabled={loading}>{loading ? "注册中..." : "注册"}</Button>
         </form>
+        )}
         <p className="text-center text-sm text-neutral-500">
           已有账号？<Link to="/login" className="font-medium text-neutral-900 hover:underline">登录</Link>
         </p>

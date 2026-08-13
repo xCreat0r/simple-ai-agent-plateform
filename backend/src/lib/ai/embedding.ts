@@ -96,37 +96,16 @@ function mockEmbedding(text: string): number[] {
 export async function generateEmbedding(text: string): Promise<number[]> {
   const provider = getProvider();
   if (provider === "mock") return mockEmbedding(text);
-  try {
-    if (provider === "dashscope") {
-      const [e] = await dashscopeEmbeddings([text]);
-      return e;
-    }
-    return await workersAiEmbedding(text);
-  } catch (err) {
-    // workers-ai 不可用时自动降级为 mock（仅用于本地调试，无语义），保证链路可用
-    if (provider === "workers-ai") {
-      console.warn(`[embedding] workers-ai 不可用（${err instanceof Error ? err.message : "未知错误"}），降级为 mock`);
-      return mockEmbedding(text);
-    }
-    throw err;
+  if (provider === "dashscope") {
+    const [e] = await dashscopeEmbeddings([text]);
+    return e;
   }
+  return workersAiEmbedding(text);
 }
 
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
-  try {
-    const provider = getProvider();
-    if (provider === "mock") return texts.map(mockEmbedding);
-    if (provider === "dashscope") return dashscopeEmbeddings(texts);
-    return await workersAiEmbeddings(texts);
-  } catch (err) {
-    // 批量接口同样支持 workers-ai 降级为 mock
-    const provider = getProvider();
-    if (provider === "workers-ai") {
-      console.warn(`[embedding] workers-ai 不可用（${err instanceof Error ? err.message : "未知错误"}），降级为 mock`);
-      return texts.map(mockEmbedding);
-    }
-    throw new Error(
-      `向量嵌入生成失败: ${err instanceof Error ? err.message : "未知错误"}`
-    );
-  }
+  const provider = getProvider();
+  if (provider === "mock") return texts.map(mockEmbedding);
+  if (provider === "dashscope") return dashscopeEmbeddings(texts);
+  return workersAiEmbeddings(texts);
 }

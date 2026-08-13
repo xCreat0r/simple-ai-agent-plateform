@@ -59,6 +59,7 @@ export async function getTool(id: string): Promise<Tool | undefined> {
     description: dbTool.description,
     parameters: params,
     async execute(args) {
+      // 自定义工具：执行时先做 URL 校验（防 SSRF，DNS 解析后校验实际 IP），再按 GET/POST 组装请求
       await validateExternalUrl(dbTool.endpoint);
       const parsedHeaders = typeof dbTool.headers === "string" ? JSON.parse(dbTool.headers) : dbTool.headers;
       const headers = sanitizeHeaders(parsedHeaders as Record<string, string> | undefined);
@@ -79,6 +80,7 @@ export async function getTool(id: string): Promise<Tool | undefined> {
         },
         body: dbTool.method === "POST" ? JSON.stringify(args) : undefined,
         redirect: "error", // 拒绝跟随重定向，防止绕过 URL 校验
+        signal: AbortSignal.timeout(10_000), // 请求超时，避免挂起
       });
       const text = await res.text();
       return `状态码: ${res.status}\n${text.slice(0, 2000)}`;
