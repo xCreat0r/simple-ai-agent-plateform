@@ -18,12 +18,6 @@ declare namespace Cloudflare {
 	interface Env extends __BaseEnv_CloudflareEnv {}
 }
 interface CloudflareEnv extends __BaseEnv_CloudflareEnv {}
-type StringifyValues<EnvType extends Record<string, unknown>> = {
-	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
-};
-declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "NEXTJS_ENV">> {}
-}
 
 // Begin runtime types
 /*! *****************************************************************************

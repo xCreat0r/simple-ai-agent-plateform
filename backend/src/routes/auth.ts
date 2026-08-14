@@ -41,10 +41,13 @@ async function enforceAuthRateLimit(c: Context, scope: string, maxPerWindow: num
   return true;
 }
 
+// 生产环境前端与后端跨站部署（如 app.example.com → api.example.com），
+// SameSite=Lax 的 cookie 不会随跨站请求发送，导致刷新后无法静默恢复登录态；
+// 故生产改用 SameSite=None; Secure（None 必须搭配 Secure，https 满足）。
 const COOKIE_OPTIONS = {
   httpOnly: true,
   path: "/",
-  sameSite: "Lax" as const,
+  sameSite: process.env.NODE_ENV === "production" ? ("None" as const) : ("Lax" as const),
   secure: process.env.NODE_ENV === "production",
   maxAge: 7 * 24 * 60 * 60,
 };

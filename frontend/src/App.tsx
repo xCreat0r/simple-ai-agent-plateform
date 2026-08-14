@@ -1,19 +1,22 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { AgentsList } from "@/pages/agents/list";
-import { AgentNew } from "@/pages/agents/new";
-import { AgentDetail } from "@/pages/agents/detail";
-import { AgentEdit } from "@/pages/agents/edit";
-import { ToolsList } from "@/pages/tools/list";
-import { ToolNew } from "@/pages/tools/new";
-import { ToolEdit } from "@/pages/tools/edit";
-import { KnowledgeList } from "@/pages/knowledge/list";
-import { KnowledgeNew } from "@/pages/knowledge/new";
-import { KnowledgeDetail } from "@/pages/knowledge/detail";
-import { Login } from "@/pages/login";
-import { Signup } from "@/pages/signup";
 import { Sidebar } from "@/components/sidebar";
+
+// 路由懒加载：每个页面独立 chunk，按需下载
+const Login = lazy(() => import("@/pages/login").then((m) => ({ default: m.Login })));
+const Signup = lazy(() => import("@/pages/signup").then((m) => ({ default: m.Signup })));
+const AgentsList = lazy(() => import("@/pages/agents/list").then((m) => ({ default: m.AgentsList })));
+const AgentNew = lazy(() => import("@/pages/agents/new").then((m) => ({ default: m.AgentNew })));
+const AgentDetail = lazy(() => import("@/pages/agents/detail").then((m) => ({ default: m.AgentDetail })));
+const AgentEdit = lazy(() => import("@/pages/agents/edit").then((m) => ({ default: m.AgentEdit })));
+const ToolsList = lazy(() => import("@/pages/tools/list").then((m) => ({ default: m.ToolsList })));
+const ToolNew = lazy(() => import("@/pages/tools/new").then((m) => ({ default: m.ToolNew })));
+const ToolEdit = lazy(() => import("@/pages/tools/edit").then((m) => ({ default: m.ToolEdit })));
+const KnowledgeList = lazy(() => import("@/pages/knowledge/list").then((m) => ({ default: m.KnowledgeList })));
+const KnowledgeNew = lazy(() => import("@/pages/knowledge/new").then((m) => ({ default: m.KnowledgeNew })));
+const KnowledgeDetail = lazy(() => import("@/pages/knowledge/detail").then((m) => ({ default: m.KnowledgeDetail })));
 
 // 默认查询策略：失败重试 1 次、30s 内不重复拉取、窗口聚焦不自动刷新
 const queryClient = new QueryClient({
@@ -28,6 +31,11 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   if (loading) return <div className="flex items-center justify-center h-screen">加载中...</div>;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
+}
+
+// 页面懒加载占位：路由 chunk 下载期间的加载态
+function PageLoading() {
+  return <div className="flex items-center justify-center h-screen text-neutral-500">加载中...</div>;
 }
 
 // 登录后主布局：左侧栏 + 内容区
@@ -45,23 +53,25 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route element={<AuthGuard><AppLayout><Outlet /></AppLayout></AuthGuard>}>
-              <Route path="/" element={<Navigate to="/agents" replace />} />
-              <Route path="/agents" element={<AgentsList />} />
-              <Route path="/agents/new" element={<AgentNew />} />
-              <Route path="/agents/:id" element={<AgentDetail />} />
-              <Route path="/agents/:id/edit" element={<AgentEdit />} />
-              <Route path="/tools" element={<ToolsList />} />
-              <Route path="/tools/new" element={<ToolNew />} />
-              <Route path="/tools/:id/edit" element={<ToolEdit />} />
-              <Route path="/knowledge" element={<KnowledgeList />} />
-              <Route path="/knowledge/new" element={<KnowledgeNew />} />
-              <Route path="/knowledge/:id" element={<KnowledgeDetail />} />
-            </Route>
-          </Routes>
+          <Suspense fallback={<PageLoading />}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route element={<AuthGuard><AppLayout><Outlet /></AppLayout></AuthGuard>}>
+                <Route path="/" element={<Navigate to="/agents" replace />} />
+                <Route path="/agents" element={<AgentsList />} />
+                <Route path="/agents/new" element={<AgentNew />} />
+                <Route path="/agents/:id" element={<AgentDetail />} />
+                <Route path="/agents/:id/edit" element={<AgentEdit />} />
+                <Route path="/tools" element={<ToolsList />} />
+                <Route path="/tools/new" element={<ToolNew />} />
+                <Route path="/tools/:id/edit" element={<ToolEdit />} />
+                <Route path="/knowledge" element={<KnowledgeList />} />
+                <Route path="/knowledge/new" element={<KnowledgeNew />} />
+                <Route path="/knowledge/:id" element={<KnowledgeDetail />} />
+              </Route>
+            </Routes>
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
