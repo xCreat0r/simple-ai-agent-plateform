@@ -53,8 +53,9 @@ async function resolveHostIps(hostname: string): Promise<string[]> {
   return results;
 }
 
-// 校验外部 URL，阻止 SSRF；异步（涉及 DNS 解析）
-export async function validateExternalUrl(rawUrl: string): Promise<URL> {
+// 校验外部 URL 并返回解析出的 IP 列表，阻止 SSRF；
+// 异步（涉及 DNS 解析）
+export async function resolveExternalUrl(rawUrl: string): Promise<{ url: URL; ips: string[] }> {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -84,5 +85,35 @@ export async function validateExternalUrl(rawUrl: string): Promise<URL> {
     throw new Error("不允许访问内网地址");
   }
 
+  return { url, ips };
+}
+
+// 仅校验，返回 URL（兼容既有调用方）
+export async function validateExternalUrl(rawUrl: string): Promise<URL> {
+  const { url } = await resolveExternalUrl(rawUrl);
   return url;
+}
+
+// 校验通过后发起请求（防 DNS rebinding TOCTOU）：
+// - http：用解析校验过的 IP 直连并覆盖 Host 头，使 fetch 不再二次解析域名，
+//   避免"校验时公网 IP、连接时内网 IP"的绕过
+// - https：因 TLS 证书绑定 hostname，无法用 IP 直连，保持域名请求，
+//   二次解析的残余风险已在文档中说明（可接受）
+// 统一拒绝跟随重定向，防止校验后跳转到内网地址
+export async function resolveAndFetch(rawUrl: string, init?: RequestInit): Promise<Response> {
+  const { url, ips } = await resolveExternalUrl(rawUrl);
+
+  if (url.protocol === "https:") {
+    return fetch(url.toString(), { ...init, redirect: "error" });
+  }
+
+  const ip = ips[0];
+  const ipPart = ip.includes(":") ? `[${ip}]` : ip;
+  const headers = new Headers(init?.headers);
+  headers.set("Host", url.host);
+  return fetch(`http://${ipPart}${url.pathname}${url.search}`, {
+    ...init,
+    headers,
+    redirect: "error",
+  });
 }

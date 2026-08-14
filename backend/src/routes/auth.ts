@@ -7,11 +7,17 @@ import { getDb } from "@/lib/db";
 import { users, refreshTokens } from "@/lib/db/schema";
 import { signAccessToken, verifyAccessToken, generateRefreshToken } from "@/lib/jwt";
 import { generateId } from "@/lib/util/uuid";
+import { sha256HexString } from "@/lib/util/hash";
 import { AuthError } from "./_middleware";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { setCsrfCookie, verifyCsrf, clearCsrfCookie } from "@/lib/csrf";
 import { config } from "@/lib/config";
 
 const authRoutes = new Hono<{ Bindings: CloudflareEnv }>();
+
+// 预生成的固定 bcrypt hash：用户不存在时也执行一次比较，
+// 使响应耗时与"密码错误"一致，消除时序侧信道（防邮箱枚举）
+const DUMMY_HASH = "$2b$10$88AdibxRrer/NqFgHW0/5OQqLj/Z2ql/LYtEufdiwKzPee.kcoenO";
 
 // 公开配置：供前端判断注册开关等无需登录即可读取的配置项
 authRoutes.get("/config", async (c) => {
@@ -63,9 +69,10 @@ async function setRefreshTokenCookie(c: any, userId: string) {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
+  // refresh token 以 SHA-256 摘要落库，数据库泄露时无法直接复用明文令牌
   await getDb().insert(refreshTokens).values({
     id: generateId(),
-    token,
+    token: await sha256HexString(token),
     userId,
     expiresAt,
     createdAt: now,
@@ -77,7 +84,7 @@ async function setRefreshTokenCookie(c: any, userId: string) {
 
 // 刷新令牌轮换：旧 token 一次性使用，用后即删，防止重放攻击
 async function rotateRefreshToken(c: any, oldToken: string, userId: string) {
-  await getDb().delete(refreshTokens).where(eq(refreshTokens.token, oldToken));
+  await getDb().delete(refreshTokens).where(eq(refreshTokens.token, await sha256HexString(oldToken)));
   await setRefreshTokenCookie(c, userId);
 }
 
@@ -87,7 +94,7 @@ async function getUserFromRefreshToken(token: string) {
   const [row] = await getDb()
     .select()
     .from(refreshTokens)
-    .where(eq(refreshTokens.token, token));
+    .where(eq(refreshTokens.token, await sha256HexString(token)));
   if (!row || row.expiresAt <= now) return null;
   const [user] = await getDb().select().from(users).where(eq(users.id, row.userId));
   return user;
@@ -99,7 +106,9 @@ authRoutes.post("/sign-up/email", async (c) => {
   if (!config.auth.allowSignup) {
     return c.json({ error: "注册已关闭" }, 403);
   }
-  const { email, password, name } = await c.req.json();
+  const { email: rawEmail, password, name } = await c.req.json();
+  // 邮箱规范化：去首尾空白 + 转小写，防止大小写变体绕过唯一约束/造成重复注册
+  const email = (rawEmail as string)?.trim().toLowerCase() ?? "";
   if (!email || !password || !name) {
     return c.json({ error: "邮箱、密码、名称为必填项" }, 400);
   }
@@ -109,7 +118,8 @@ authRoutes.post("/sign-up/email", async (c) => {
 
   const existing = await getDb().select().from(users).where(eq(users.email, email));
   if (existing.length > 0) {
-    return c.json({ error: "邮箱已注册" }, 400);
+    // 统一文案，不暴露邮箱是否已注册（防用户枚举）
+    return c.json({ error: "注册失败，请稍后重试" }, 400);
   }
 
   const id = generateId();
@@ -129,19 +139,24 @@ authRoutes.post("/sign-up/email", async (c) => {
   const user = { id, name };
   const accessToken = await signAccessToken(id);
   await setRefreshTokenCookie(c, id);
+  setCsrfCookie(c, COOKIE_OPTIONS.sameSite, COOKIE_OPTIONS.secure);
 
   return c.json({ user, accessToken }, 201);
 });
 
 authRoutes.post("/sign-in/email", async (c) => {
   if (!(await enforceAuthRateLimit(c, "signin", 10))) return;
-  const { email, password } = await c.req.json();
+  const { email: rawEmail, password } = await c.req.json();
+  const email = (rawEmail as string)?.trim().toLowerCase() ?? "";
   if (!email || !password) {
     return c.json({ error: "邮箱和密码为必填项" }, 400);
   }
 
   const [user] = await getDb().select().from(users).where(eq(users.email, email));
+  // 用户不存在或未设密码时同样执行一次 bcrypt 比较，
+  // 让耗时与"密码错误"一致，消除时序侧信道（防邮箱枚举）
   if (!user || !user.passwordHash) {
+    await compare(password, DUMMY_HASH);
     return c.json({ error: "邮箱或密码错误" }, 401);
   }
 
@@ -152,12 +167,15 @@ authRoutes.post("/sign-in/email", async (c) => {
 
   const accessToken = await signAccessToken(user.id);
   await setRefreshTokenCookie(c, user.id);
+  setCsrfCookie(c, COOKIE_OPTIONS.sameSite, COOKIE_OPTIONS.secure);
 
   return c.json({ user: { id: user.id, name: user.name }, accessToken });
 });
 
 authRoutes.post("/refresh", async (c) => {
   if (!(await enforceAuthRateLimit(c, "refresh", 30))) return;
+  // CSRF 校验：refresh 凭 cookie 轮换登录态，必须防跨站伪造
+  if (!verifyCsrf(c)) return c.json({ error: "请求无效" }, 403);
   const token = getMetaFromCookie(c);
   if (!token) throw new AuthError();
 
@@ -166,16 +184,20 @@ authRoutes.post("/refresh", async (c) => {
 
   await rotateRefreshToken(c, token, user.id);
   const accessToken = await signAccessToken(user.id);
+  setCsrfCookie(c, COOKIE_OPTIONS.sameSite, COOKIE_OPTIONS.secure);
 
   return c.json({ user: { id: user.id, name: user.name }, accessToken });
 });
 
 authRoutes.post("/sign-out", async (c) => {
+  // CSRF 校验：防恶意站点强制登出受害者
+  if (!verifyCsrf(c)) return c.json({ error: "请求无效" }, 403);
   const token = getMetaFromCookie(c);
   if (token) {
-    await getDb().delete(refreshTokens).where(eq(refreshTokens.token, token));
+    await getDb().delete(refreshTokens).where(eq(refreshTokens.token, await sha256HexString(token)));
   }
   deleteCookie(c, "refresh_token", COOKIE_OPTIONS);
+  clearCsrfCookie(c, COOKIE_OPTIONS.sameSite, COOKIE_OPTIONS.secure);
   return c.json({ ok: true });
 });
 

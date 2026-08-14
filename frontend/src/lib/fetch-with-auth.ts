@@ -15,6 +15,18 @@ export function setAccessToken(token: string | null): void {
   accessToken = token;
 }
 
+// 读取 Double-submit 的 csrf_token cookie（非 HttpOnly，前端可读），
+// 供 cookie 鉴权的 auth 端点（refresh/sign-out）附加到请求头防 CSRF
+function getCsrfToken(): string {
+  const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+  return m ? decodeURIComponent(m[1]) : "";
+}
+
+// 需要 CSRF 防护的端点（后端 verifyCsrf 只对它们生效）
+function needsCsrf(path: string): boolean {
+  return path.startsWith("/api/auth/refresh") || path.startsWith("/api/auth/sign-out");
+}
+
 // 通过 HttpOnly cookie 中的 refresh token 换取新的 access token
 async function doRefresh(): Promise<{ user: { id: string; name: string | null }; accessToken: string } | null> {
   if (refreshPromise) return refreshPromise;
@@ -23,6 +35,7 @@ async function doRefresh(): Promise<{ user: { id: string; name: string | null };
       const res = await fetch(`${API}/api/auth/refresh`, {
         method: "POST",
         credentials: "include",
+        headers: { "X-CSRF-Token": getCsrfToken() },
       });
       if (!res.ok) return null;
       const data = await res.json();
@@ -63,6 +76,7 @@ export async function fetchWithAuth(
     }
     const token = accessToken;
     if (token) headers.set("Authorization", `Bearer ${token}`);
+    if (needsCsrf(path)) headers.set("X-CSRF-Token", getCsrfToken());
     return fetch(`${API}${path}`, { ...init, headers, credentials: "include" });
   };
 

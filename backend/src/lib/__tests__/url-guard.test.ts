@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // mock node:dns，避免测试依赖真实网络
 vi.mock("node:dns", () => ({
@@ -15,7 +15,7 @@ vi.mock("node:dns", () => ({
 }));
 
 import dns from "node:dns";
-import { validateExternalUrl } from "@/lib/tools/url-guard";
+import { validateExternalUrl, resolveAndFetch } from "@/lib/tools/url-guard";
 
 const resolve4 = vi.mocked(dns.promises.resolve4);
 const resolve6 = vi.mocked(dns.promises.resolve6);
@@ -125,5 +125,52 @@ describe("validateExternalUrl", () => {
     mockDns(["142.250.72.14"]);
     const url = await validateExternalUrl("https://www.google.com");
     expect(url.protocol).toBe("https:");
+  });
+});
+
+describe("resolveAndFetch", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("http 请求用解析后的 IP 直连并覆盖 Host 头（防 DNS rebinding）", async () => {
+    mockDns(["93.184.216.34"]);
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(new Response("ok"));
+
+    await resolveAndFetch("http://api.example.com/data");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://93.184.216.34/data");
+    const headers = new Headers(init?.headers);
+    expect(headers.get("Host")).toBe("api.example.com");
+    expect(init?.redirect).toBe("error");
+  });
+
+  it("https 请求保持域名（TLS 证书绑定 hostname）", async () => {
+    mockDns(["142.250.72.14"]);
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(new Response("ok"));
+
+    await resolveAndFetch("https://www.google.com/path");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://www.google.com/path");
+    expect(init?.redirect).toBe("error");
+  });
+
+  it("内网地址直接拒绝，不发起 fetch", async () => {
+    mockDns(["127.0.0.1"]);
+    const fetchMock = vi.mocked(fetch);
+
+    await expect(resolveAndFetch("http://evil.example.com/")).rejects.toThrow(
+      "不允许访问内网地址"
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

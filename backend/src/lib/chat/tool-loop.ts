@@ -20,6 +20,7 @@ interface ToolLoopOptions {
   model: string;
   temperature: number;
   maxTokens: number;
+  userId: string;
 }
 const encoder = new TextEncoder();
 
@@ -29,7 +30,7 @@ export async function runToolLoop(
   toolDefs: ToolDef[],
   options: ToolLoopOptions
 ): Promise<void> {
-  const { chatId, model, temperature, maxTokens } = options;
+  const { chatId, model, temperature, maxTokens, userId } = options;
   let currentMessages = [...messages];
   const maxSteps = 5;
 
@@ -116,7 +117,8 @@ export async function runToolLoop(
 
       // 依次执行每个工具调用，把结果以 tool 角色消息写回上下文
       for (const tc of toolCallsArray) {
-        const tool = await getTool(tc.name);
+        // 校验工具归属：只能执行当前用户拥有的自定义工具（内置工具不受限）
+        const tool = await getTool(tc.name, userId);
 
         controller.enqueue(encoder.encode(`\n\n> 🔍 正在调用 ${tc.name}...\n\n`));
 
@@ -133,8 +135,10 @@ export async function runToolLoop(
           try {
             toolResult = await tool.execute(args);
           } catch (err) {
-            // 工具执行异常隔离：转成 tool 消息返回模型，让其纠错继续，不中断整场对话
-            toolResult = `工具执行失败: ${err instanceof Error ? err.message : "未知错误"}`;
+            // 工具执行异常隔离：转成 tool 消息返回模型，让其纠错继续，不中断整场对话。
+            // 仅回显通用文案，真实错误进服务端日志，避免把内部细节传给模型/用户
+            console.error("[tool-loop] 工具执行失败:", err);
+            toolResult = "工具执行失败，请重试";
           }
         }
 

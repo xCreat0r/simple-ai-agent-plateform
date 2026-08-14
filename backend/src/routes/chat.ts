@@ -105,8 +105,9 @@ chatRoutes.post("/", async (c) => {
     console.warn(`[chat] 知识检索失败，跳过知识注入: ${err instanceof Error ? err.message : "未知错误"}`);
   }
 
-  // 收集该 agent 启用的工具定义，供 LLM 选择调用（批量查询，避免 N+1）
-  const enabledToolDefs = await getToolDefinitions(enabledToolIds);
+  // 收集该 agent 启用的工具定义，供 LLM 选择调用（批量查询，避免 N+1）；
+  // 带 userId 校验归属，防止跨用户工具被带入
+  const enabledToolDefs = await getToolDefinitions(enabledToolIds, userId);
   const toolDefs = enabledToolDefs.map((t) => ({
     type: "function" as const,
     function: { name: t.id, description: t.description, parameters: t.parameters },
@@ -118,14 +119,16 @@ chatRoutes.post("/", async (c) => {
     const sseStream = new ReadableStream({
       start(controller) {
         runToolLoop(controller, conversationMessages, toolDefs, {
-          chatId, model: agent.model, temperature: agent.temperature, maxTokens: agent.maxTokens,
+          chatId, model: agent.model, temperature: agent.temperature, maxTokens: agent.maxTokens, userId,
         }).then(async () => {
           controller.close();
           // 新对话在首个回复完成后异步生成标题（失败不影响主流程）
           if (isNewChat) await generateChatTitle(chatId, agent.id, agent.model, userQuery);
         }).catch((err) => {
-          // 错误以明确标记注入流，前端据此展示独立错误消息（不混入正文）
-          controller.enqueue(encoder.encode(`\n\n[error] ${err.message}[/error]\n\n`));
+          // 错误以明确标记注入流，前端据此展示独立错误消息（不混入正文）。
+          // 仅回显通用文案，真实错误进服务端日志，避免泄露内部细节
+          console.error("[chat] 流式生成失败:", err);
+          controller.enqueue(encoder.encode(`\n\n[error] 生成失败，请重试[/error]\n\n`));
           controller.error(err);
         });
       },

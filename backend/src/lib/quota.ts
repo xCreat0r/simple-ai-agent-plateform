@@ -42,7 +42,11 @@ export async function checkQuota(userId: string): Promise<{ allowed: boolean; re
   const currentRaw = await kv.get(kvKey);
   const current = currentRaw ? parseInt(currentRaw, 10) : 0;
 
-  if (current >= plan.dailyRequests) {
+  // KV get-then-put 非原子，高并发下计数可能偏低；
+  // 阈值乘 0.9 容差系数，缓解竞态造成的配额绕过（尽力而为）
+  const effectiveLimit = Math.max(1, Math.floor(plan.dailyRequests * 0.9));
+
+  if (current >= effectiveLimit) {
     return { allowed: false, current, limit: plan.dailyRequests, reason: `今日已用 ${current}/${plan.dailyRequests} 次` };
   }
 

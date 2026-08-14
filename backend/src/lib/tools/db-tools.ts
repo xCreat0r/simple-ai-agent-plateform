@@ -1,9 +1,9 @@
 import { getDb } from "@/lib/db";
 import { tools as toolsTable } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import type { Tool } from "./types";
 import { toolParametersSchema } from "@/lib/validators";
-import { validateExternalUrl } from "./url-guard";
+import { resolveAndFetch } from "./url-guard";
 import { searchTool } from "./search-execute";
 import { webRequestTool } from "./web-request-execute";
 
@@ -39,14 +39,17 @@ const serverTools: Record<string, Tool> = {
   [webRequestTool.id]: webRequestTool,
 };
 
-export async function getTool(id: string): Promise<Tool | undefined> {
+export async function getTool(id: string, userId?: string): Promise<Tool | undefined> {
   const serverTool = serverTools[id];
   if (serverTool) return serverTool;
 
+  // 自定义工具必须属于传入的 userId；未带 userId 视为无权，
+  // 纵深防御：防止越权调用他人工具（即使工具 id 被提示注入或脏数据带入）
+  if (!userId) return undefined;
   const [dbTool] = await getDb()
     .select()
     .from(toolsTable)
-    .where(eq(toolsTable.id, id));
+    .where(and(eq(toolsTable.id, id), eq(toolsTable.userId, userId)));
 
   if (!dbTool) return undefined;
 
@@ -59,8 +62,7 @@ export async function getTool(id: string): Promise<Tool | undefined> {
     description: dbTool.description,
     parameters: params,
     async execute(args) {
-      // 自定义工具：执行时先做 URL 校验（防 SSRF，DNS 解析后校验实际 IP），再按 GET/POST 组装请求
-      await validateExternalUrl(dbTool.endpoint);
+      // 自定义工具：执行时先做 URL 校验（防 SSRF），并锁定连接地址防 DNS rebinding
       const parsedHeaders = typeof dbTool.headers === "string" ? JSON.parse(dbTool.headers) : dbTool.headers;
       const headers = sanitizeHeaders(parsedHeaders as Record<string, string> | undefined);
       const endpointUrl = new URL(dbTool.endpoint);
@@ -72,14 +74,13 @@ export async function getTool(id: string): Promise<Tool | undefined> {
         }
       }
 
-      const res = await fetch(endpointUrl.toString(), {
+      const res = await resolveAndFetch(endpointUrl.toString(), {
         method: dbTool.method,
         headers: {
           "Content-Type": "application/json",
           ...headers,
         },
         body: dbTool.method === "POST" ? JSON.stringify(args) : undefined,
-        redirect: "error", // 拒绝跟随重定向，防止绕过 URL 校验
         signal: AbortSignal.timeout(10_000), // 请求超时，避免挂起
       });
       const text = await res.text();
@@ -88,7 +89,7 @@ export async function getTool(id: string): Promise<Tool | undefined> {
   };
 }
 
-export async function getToolDefinitions(toolIds: string[]) {
+export async function getToolDefinitions(toolIds: string[], userId?: string) {
   const defs: Array<{
     id: string;
     name: string;
@@ -108,10 +109,12 @@ export async function getToolDefinitions(toolIds: string[]) {
       continue;
     }
 
+    // 自定义工具同样校验归属，未带 userId 时视为无权
+    if (!userId) continue;
     const [dbTool] = await getDb()
-    .select()
+      .select()
       .from(toolsTable)
-      .where(eq(toolsTable.id, id));
+      .where(and(eq(toolsTable.id, id), eq(toolsTable.userId, userId)));
 
     if (dbTool) {
       defs.push({

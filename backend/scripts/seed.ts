@@ -6,7 +6,12 @@ function env(key: string, fallback: string): string {
 }
 
 const email = env("SEED_EMAIL", "admin@example.com");
-const password = env("SEED_PASSWORD", "changeme123");
+// 管理员密码必须显式提供，杜绝默认弱口令（如 changeme123）误用于生产
+const password = process.env.SEED_PASSWORD;
+if (!password) {
+  console.error("错误: 请设置 SEED_PASSWORD 环境变量（管理员密码）");
+  process.exit(1);
+}
 const adminName = env("SEED_NAME", "管理员");
 const dbUrl = env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/agent_platform");
 

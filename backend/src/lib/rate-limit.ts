@@ -21,7 +21,11 @@ export async function checkRateLimit(
   const current = await env.RATE_LIMIT_KV.get(kvKey);
   const count = current ? parseInt(current, 10) : 0;
 
-  if (count >= maxRequests) {
+  // KV get-then-put 非原子，高并发下计数可能偏低；
+  // 阈值乘 0.9 容差系数，缓解竞态造成的限流绕过（尽力而为）
+  const effectiveMax = Math.max(1, Math.floor(maxRequests * 0.9));
+
+  if (count >= effectiveMax) {
     // 超限：计算窗口结束时间供客户端知道何时重试
     const resetAt = (windowKey + 1) * windowMs;
     return { allowed: false, remaining: 0, resetAt };
@@ -33,5 +37,5 @@ export async function checkRateLimit(
   });
 
   const resetAt = (windowKey + 1) * windowMs;
-  return { allowed: true, remaining: maxRequests - count - 1, resetAt };
+  return { allowed: true, remaining: effectiveMax - count - 1, resetAt };
 }
