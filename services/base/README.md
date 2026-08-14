@@ -1,5 +1,7 @@
 # Base Service
 
+> ⚠️ **已停用（保留参考/回退）**：自 2026-08 起 PDF 解析改为 Worker 内本地解析（`unpdf`，见 `backend/src/lib/ai/pdf.ts`），本服务不再部署/被调用。代码保留供参考与回退。
+
 PDF 文本提取服务，为 Agent 平台知识库提供文档解析能力。
 
 ## 技术栈

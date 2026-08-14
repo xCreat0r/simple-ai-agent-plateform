@@ -141,7 +141,7 @@ npm run dev
 │   │   └── lib/                 # api 客户端 / auth 上下文 / types / utils
 │   └── vite.config.ts
 │
-├── services/                    # 辅助服务（base: PDF 解析，Python FastAPI + PyMuPDF）
+├── services/                    # 辅助服务（base: PDF 解析，已停用保留参考，Python FastAPI + PyMuPDF）
 ├── docs/                        # 架构 + 部署文档
 ├── specs/                       # MVP 规格
 ├── AGENTS.md                    # AI 编码代理规则
@@ -223,8 +223,9 @@ DASHSCOPE_EMBEDDING_MODEL=text-embedding-v3       # 1024 维，与数据库 sche
 # KNOWLEDGE_TOP_K=3
 # KNOWLEDGE_SIMILARITY_THRESHOLD=0.6             # cosine 距离阈值，越小越严格（DashScope 实测相关距离约 0.5-0.6）
 
-# PDF 解析（base 服务）
-# BASE_SERVICE_URL=http://localhost:8000          # 上传 PDF 时需要（部署见 docs/ecs-deployment.md）
+# PDF 解析（Worker 内本地解析，unpdf；无需 base 服务）
+# KNOWLEDGE_MAX_FILE_SIZE=5242880                # 上传文件大小上限（默认 5MB）
+# KNOWLEDGE_MAX_PDF_PAGES=100                    # PDF 页数上限
 
 # Auth
 JWT_SECRET=                                     # openssl rand -base64 32 生成的签名密钥
@@ -232,10 +233,20 @@ JWT_SECRET=                                     # openssl rand -base64 32 生成
 VITE_API_URL=http://localhost:8787               # 前端 API 地址（frontend/.env）
 ```
 
-## Deployment
+ ## Deployment
 
 参见 [docs/cloudflare-deployment.md](docs/cloudflare-deployment.md)。
-PDF 解析 base 服务部署参见 [docs/ecs-deployment.md](docs/ecs-deployment.md)。
+PDF 解析在 Worker 内完成，无独立服务；原 base 服务（ECS）已停用，保留参考见 [docs/ecs-deployment.md](docs/ecs-deployment.md)。
+
+## Security
+
+- **认证**：access token 15 分钟（JWT HS256 + issuer），refresh token 随机 256bit、仅存 SHA-256 摘要、一次性轮换、HttpOnly cookie
+- **CSRF**：cookie 鉴权的 auth 端点（refresh / sign-out）采用 Double-submit cookie + `X-CSRF-Token` 头校验
+- **SSRF 防护**：自定义工具/内置网页请求先 DNS 解析校验实际 IP（拒绝内网/环回/云元数据），http 直连锁定 IP 防 DNS rebinding，拒绝跟随重定向；https 保留域名请求（TLS 绑定，残余风险可接受）
+- **提示注入**：外部内容（网页/搜索/知识库）以 `<untrusted_data>` 标签包裹并声明安全规则
+- **防枚举**：登录/注册统一错误文案，用户不存在时执行 dummy bcrypt 比较消除时序差异；邮箱规范化（trim + 小写）
+- **密钥管理**：API key / JWT_SECRET 通过 `wrangler secret` 配置，禁止写入代码或仓库；任何密钥泄露必须立即轮换
+- **限流**：认证接口与对话按用户/IP 基于 KV 限流（阈值含 0.9 容差，缓解 KV 非原子竞态）
 
 ## MVP Scope
 

@@ -24,6 +24,7 @@
     "jose": "^6.2.4",
     "openai": "^6.39.0",
     "postgres": "^3.4.9",
+    "unpdf": "^1.8.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

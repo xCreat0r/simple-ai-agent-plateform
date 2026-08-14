@@ -238,18 +238,6 @@ npx wrangler secret put SERPAPI_API_KEY
 npx wrangler secret put EMBEDDING_PROVIDER
 # 输入: workers-ai（默认，生产推荐）/ dashscope（阿里云百炼）
 
-npx wrangler secret put BASE_SERVICE_URL
-# 输入: PDF 解析服务地址，如 https://your-domain.com:38080（上传 PDF 时需要）
-
-npx wrangler secret put BASE_SERVICE_KEY
-# 输入: base 服务 BASE_SERVICE_KEYS 中某组的 key（上传 PDF 时需要）
-
-npx wrangler secret put BASE_SERVICE_SECRET
-# 输入: 与上述 key 对应的 secret（上传 PDF 时需要）
-
-npx wrangler secret put PDF_ENCRYPTION_KEY
-# 输入: openssl rand -base64 32 生成的密钥（与 base 服务 PDF_ENCRYPTION_KEY 一致，可选；配置后 PDF 密文传输）
-
 npx wrangler secret put ALLOW_SIGNUP
 # 输入: true（开放公开注册）；不配置即默认关闭注册
 ```
@@ -363,10 +351,6 @@ CI 流程：
 | `DASHSCOPE_API_KEY` | 按需 | `EMBEDDING_PROVIDER=dashscope` 时必填 |
 | `DASHSCOPE_BASE_URL` | 可选 | DashScope 兼容地址（默认官方 `https://dashscope.aliyuncs.com/compatible-mode/v1`） |
 | `DASHSCOPE_EMBEDDING_MODEL` | 可选 | 默认 `text-embedding-v3`（1024 维，与 schema 匹配） |
-| `BASE_SERVICE_URL` | 按需 | PDF 解析服务地址（上传 PDF 时需要） |
-| `BASE_SERVICE_KEY` | 按需 | base 服务鉴权 key（HMAC 签名，对应 `BASE_SERVICE_KEYS` 中某组） |
-| `BASE_SERVICE_SECRET` | 按需 | base 服务鉴权 secret（与 key 对应，仅本地计算签名，不传输） |
-| `PDF_ENCRYPTION_KEY` | 可选 | 应用层加密密钥（base64 32 字节，与 base 服务一致，`openssl rand -base64 32`）；配置后 PDF 密文传输，否则明文 |
 | `ALLOW_SIGNUP` | 可选 | 注册开关，默认关闭；设 `true` 开放公开注册 |
 
 ### Cloudflare 绑定 (wrangler.jsonc)
@@ -437,10 +421,10 @@ CI 流程：
 - 若超限，考虑 `wrangler deploy --minify` 或升级 Paid Plan
 
 ### 2. PDF 解析
-- PDF 文本提取由独立 base 服务完成（Python FastAPI + PyMuPDF），Worker 通过 `BASE_SERVICE_URL` 调用
-- base 服务需配置 `BASE_SERVICE_KEYS` 并采用 HMAC-SHA256 请求签名鉴权（请求头 `X-Api-Key`/`X-Timestamp`/`X-Nonce`/`X-Signature`，`X-Api-Key` 仅标识、secret 不落公网），避免无鉴权暴露公网
-- Worker 端通过 `BASE_SERVICE_KEY` / `BASE_SERVICE_SECRET` 计算签名（见 `src/lib/ai/signature.ts`）
-- base 服务部署参见 [ecs-deployment.md](ecs-deployment.md)
+- PDF 文本提取在 Worker 内**本地解析**（`unpdf` / PDF.js serverless 构建，见 `src/lib/ai/pdf.ts`），无需独立服务与 `BASE_SERVICE_*` secrets
+- 上传限制：默认 5MB（`KNOWLEDGE_MAX_FILE_SIZE`）、页数上限 100（`KNOWLEDGE_MAX_PDF_PAGES`）；解析在主事件循环执行，内置 30s 超时与资源防护
+- ⚠️ 免费版有每请求 CPU 时间限制，大 PDF 可能被截断；生产建议使用付费计划（Bundled）
+- 原 base 服务（ECS）已停用，代码保留于 `services/base` 作参考/回退，参见 [ecs-deployment.md](ecs-deployment.md)
 
 ### 3. SSE 流式输出
 - Cloudflare Workers 支持 ReadableStream
@@ -449,8 +433,17 @@ CI 流程：
 ### 4. 限流和配额
 - 使用 KV 存储，TTL 自动过期
 - KV 写入有每秒限制，但通常足够
+- KV get-then-put 非原子，高并发下计数可能偏低；阈值内置 0.9 容差系数缓解竞态（尽力而为）
 
-### 5. 云厂商锁定
+### 5. 安全机制
+- **CSRF**：`refresh` / `sign-out` 等 cookie 鉴权端点使用 Double-submit cookie（非 HttpOnly `csrf_token` + `X-CSRF-Token` 请求头），前端 `fetch-with-auth.ts` 自动附加；无匹配头返回 403
+- **refresh token 哈希**：落库仅存 SHA-256 摘要（`src/lib/util/hash.ts`），数据库泄露时明文令牌不可复用；旧明文 token 已全部失效（需重新登录）
+- **防枚举**：注册统一文案不暴露邮箱存在性；登录时用户不存在也执行 dummy bcrypt 比较消除时序差异；邮箱统一 `trim().toLowerCase()` 后入库（存量数据可用 `backend/scripts/normalize-emails.ts` 修正）
+- **SSRF**：自定义工具与内置网页请求先 DNS 解析校验实际 IP（拒绝内网/环回/云元数据），`http://` 锁定已校验 IP 直连并覆盖 `Host` 头防 DNS rebinding，统一拒绝重定向；`https://` 因 TLS 证书绑定 hostname 保持域名请求，二次解析的残余 TOCTOU 风险已接受（见 `src/lib/tools/url-guard.ts`）
+- **工具归属**：对话中自定义工具执行前校验 `tools.userId`，仅内置工具与当前用户拥有的工具可被调用
+- **密钥泄露应急**：任何密钥（`JWT_SECRET`、`DEEPSEEK_API_KEY` 等）若曾进入代码/仓库，必须立即轮换；涉及 git 历史时用 `git filter-repo` 重写并 `force-push`
+
+### 6. 云厂商锁定
 - 数据库通过 Drizzle ORM + PostgreSQL，结构性依赖较低
 - Hyperdrive 是 Cloudflare 专有服务，迁移到其他平台需绕过它直接连接数据库
 

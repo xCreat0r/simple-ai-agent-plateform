@@ -1,7 +1,7 @@
 # Feature Spec: Knowledge Base (RAG)
 
 > **Version:** 1.1
-> **Status:** 已实现 — M1 大部分已落地（PostgreSQL pgvector / workers-ai·dashscope 嵌入 / Python base 服务解析 PDF）
+> **Status:** 已实现 — M1 大部分已落地（PostgreSQL pgvector / workers-ai·dashscope 嵌入 / Worker 内 unpdf 本地解析 PDF）
 > **Owner:** Platform Team
 > **Last Updated:** 2026-08-08
 > **本文档为需求契约**：描述当前代码的实际行为，并保留可验收的需求与指标。与代码不一致处**以代码实现为准**，实现细节见 [architecture.md](../architecture.md)。未实现项在文内标注。
@@ -158,7 +158,7 @@
 
 | 编号 | 类别 | 需求 |
 |------|------|------|
-| NFR-01 | 性能 | 上传接口应在 1s 内返回（向量化异步；文本解析为同步，PDF 解析含外部服务调用，基线另行测量） |
+| NFR-01 | 性能 | 上传接口应在 1s 内返回（向量化异步；文本解析为同步，PDF 本地解析，基线另行测量） |
 | NFR-02 | 性能 | 单文档处理时间应小于 60s（典型大小） |
 | NFR-03 | 性能 | 对话检索延迟应 < 500ms（不含 LLM 生成） |
 | NFR-04 | 安全 | 所有知识库/文档接口需鉴权；数据按租户隔离 |
@@ -398,7 +398,7 @@ GET /api/knowledge/kb_123/documents
 | 访问不存在的知识库/文档 | 404 |
 | 未携带 token / token 失效 | 401 |
 | 向量化服务不可用 | 任何 provider 失败均将文档标记 `failed`（不再降级 mock），错误可读；不崩溃。本地调试如需无语义链路，显式设 `EMBEDDING_PROVIDER=mock` |
-| 上传 PDF 时 base 服务未配置/鉴权失败 | 上传返回 4xx，错误信息可读（base 服务用 HMAC-SHA256 请求签名校验：时间戳窗口 ±300s + nonce 去重防重放；未配置 `BASE_SERVICE_KEYS` 时 fail-closed 返回 503） |
+| 上传 PDF 解析失败/超时/页数超限 | 上传返回 4xx，错误信息可读（Worker 内 `unpdf` 本地解析：页数上限 `KNOWLEDGE_MAX_PDF_PAGES`，30s 超时，`maxImageSize` 资源防护） |
 | 并发上传 | 各文档独立处理，互不影响 |
 | 文档处理中删除该文档/知识库 | 删除操作生效；后台嵌入任务不主动取消，写入时撞外键失败，无孤儿分块残留（会产生失败日志） |
 | 超长文件名 | 正常存储展示，不注入问题 |

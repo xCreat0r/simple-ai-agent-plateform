@@ -40,7 +40,8 @@ export const config = {
   },
 
   knowledge: {
-    maxFileSize: numEnv("KNOWLEDGE_MAX_FILE_SIZE", 10 * 1024 * 1024),
+    maxFileSize: numEnv("KNOWLEDGE_MAX_FILE_SIZE", 5 * 1024 * 1024),
+    maxPdfPages: numEnv("KNOWLEDGE_MAX_PDF_PAGES", 100),
     chunkMaxChars: numEnv("KNOWLEDGE_CHUNK_MAX_CHARS", 800),
     chunkMinChars: numEnv("KNOWLEDGE_CHUNK_MIN_CHARS", 300),
     chunkOverlap: numEnv("KNOWLEDGE_CHUNK_OVERLAP", 100),

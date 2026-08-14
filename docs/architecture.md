@@ -21,10 +21,10 @@ Simple AI Agent Platform 是一个轻量级多用户 AI Agent 管理平台。基
 | Streaming | ReadableStream SSE | — |
 | Embedding | workers-ai (@cf/baai/bge-m3) / DashScope (text-embedding-v3) / mock，三选一 | — |
 | Auth | 自研 JWT (jose) + refresh token 轮换 + bcryptjs 密码哈希 | — |
-| PDF 解析 | Python base 服务 (FastAPI + PyMuPDF)，独立部署 | — |
+| PDF 解析 | Worker 内本地解析（unpdf / PDF.js serverless），无独立服务 | — |
 | Validation | Zod | 4 |
 | Cache | Cloudflare KV（限流） | — |
-| Deploy | Cloudflare Workers + Pages；base 服务部署于 ECS | — |
+| Deploy | Cloudflare Workers + Pages | — |
 
 > 说明：本文档不含 D1 / Cloudflare Vectorize / Better Auth。数据库为 PostgreSQL（含 pgvector），认证为自研 JWT，嵌入通过 `EMBEDDING_PROVIDER` 切换。
 
@@ -81,7 +81,7 @@ graph TB
         direction LR
         PG["PostgreSQL (pgvector)"]
         KV["KV 限流"]
-        Base["Base 服务 PDF 解析"]
+        Base["PDF 本地解析 (unpdf)"]
         DeepSeek["DeepSeek API"]
         EmbedAPI["Workers AI / DashScope"]
         SerpAPI["SerpAPI"]
@@ -454,7 +454,7 @@ backend/
 └── package.json
 
 services/
-└── base/                       # PDF 解析服务 (Python FastAPI + PyMuPDF)
+└── base/                       # 【已停用】PDF 解析服务 (Python FastAPI + PyMuPDF)，代码保留作参考/回退
     ├── app/
     │   ├── main.py             # GET /health + POST /doc-parser/parse
     │   └── pdf_parser.py       # PyMuPDF 文字层提取
@@ -528,12 +528,9 @@ sequenceDiagram
 | `DASHSCOPE_API_KEY` | 按需 | 阿里云百炼 Key（`EMBEDDING_PROVIDER=dashscope` 时需要） |
 | `DASHSCOPE_BASE_URL` | 可选 | DashScope 兼容地址（默认官方） |
 | `DASHSCOPE_EMBEDDING_MODEL` | 可选 | 默认 `text-embedding-v3`（1024 维，与 schema 匹配） |
-| `BASE_SERVICE_URL` | 按需 | PDF 解析 base 服务地址（上传 PDF 时需要） |
-| `BASE_SERVICE_KEY` | 按需 | base 服务鉴权 key（HMAC 签名，对应 base `BASE_SERVICE_KEYS` 中某组） |
-| `BASE_SERVICE_SECRET` | 按需 | base 服务鉴权 secret（与 key 对应，仅本地计算签名，不落公网） |
 | `DATABASE_URL` | 本地开发 | 本地 PostgreSQL 连接串（生产用 Hyperdrive） |
 
-知识库检索参数（可选，见 `src/lib/config.ts`）：`KNOWLEDGE_TOP_K`、`KNOWLEDGE_SIMILARITY_THRESHOLD`（cosine **距离**阈值，越小越严格）、`KNOWLEDGE_CHUNK_MAX_CHARS` / `MIN_CHARS` / `OVERLAP`、`KNOWLEDGE_EMBEDDING_BATCH_SIZE`、`KNOWLEDGE_MAX_FILE_SIZE`。配额与限流参数：`QUOTA_FREE_*`、`RATE_LIMIT_*`。
+知识库检索参数（可选，见 `src/lib/config.ts`）：`KNOWLEDGE_TOP_K`、`KNOWLEDGE_SIMILARITY_THRESHOLD`（cosine **距离**阈值，越小越严格）、`KNOWLEDGE_CHUNK_MAX_CHARS` / `MIN_CHARS` / `OVERLAP`、`KNOWLEDGE_EMBEDDING_BATCH_SIZE`、`KNOWLEDGE_MAX_FILE_SIZE`（默认 5MB）、`KNOWLEDGE_MAX_PDF_PAGES`（默认 100）。配额与限流参数：`QUOTA_FREE_*`、`RATE_LIMIT_*`。
 
 Cloudflare 绑定（通过 `wrangler.jsonc` 配置，非环境变量）：
 - `HYPERDRIVE` — 连接 PostgreSQL（含 pgvector）
@@ -549,4 +546,4 @@ Cron 触发器（`wrangler.jsonc` `triggers`）：
 ## 部署
 
 - Cloudflare Workers + Pages：参见 [cloudflare-deployment.md](cloudflare-deployment.md)
-- Base 服务（PDF 解析，ECS）：参见 [ecs-deployment.md](ecs-deployment.md)
+- PDF 解析在 Worker 内本地完成（unpdf），无需独立服务；base 服务（ECS，已停用）部署参见 [ecs-deployment.md](ecs-deployment.md)

@@ -9,10 +9,6 @@ interface __BaseEnv_CloudflareEnv {
 	QUOTA_KV: KVNamespace;
 	HYPERDRIVE: Hyperdrive;
 	AI: any;
-	BASE_SERVICE_URL: string;
-	BASE_SERVICE_KEY: string;
-	BASE_SERVICE_SECRET: string;
-	PDF_ENCRYPTION_KEY: string;
 }
 declare namespace Cloudflare {
 	interface Env extends __BaseEnv_CloudflareEnv {}

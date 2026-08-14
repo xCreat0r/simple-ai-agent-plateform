@@ -1,5 +1,7 @@
 # ECS 部署指南（Docker）
 
+> ⚠️ **已停用（保留参考）**：自 2026-08 起 PDF 解析改为 Worker 内本地解析（`unpdf`，见 `backend/src/lib/ai/pdf.ts`），不再部署/调用 base 服务。本文档仅作历史参考与回退方案（若未来重新启用，需同步 Worker 端 `BASE_SERVICE_*` secrets 与 PDF 密文配置）。
+
 在云服务器（如阿里云 ECS）上通过 Docker 部署 `base-service` 镜像。
 
 ## 部署架构
@@ -104,6 +106,13 @@ docker run -d \
 4. **移除**：从 `BASE_SERVICE_KEYS` 删除旧组，`docker restart base-service`
 
 > `BASE_SERVICE_KEYS` 在服务启动时解析，修改后需重启容器。任何单个请求只携带一组 key/签名（Worker 侧单 key 签名，base 侧多 key 可验证）。
+
+### 密钥泄露应急
+
+> 若任一 secret（含 `services/base/.env.example` 中历史出现过的示例值）曾被提交到代码仓库或暴露，必须视为已泄露并立即轮换：
+> 1. 用上面的无中断轮换流程把 Worker 与 base 服务切换到全新 secret
+> 2. 涉及 git 历史时，用 `git filter-repo --replace-text <映射文件>` 重写历史删除旧值，备份后 `force-push`
+> 3. 轮换后确认仓库中无任何真实 secret（`git grep -c <旧值>` 应无命中），模板文件一律使用 `your-secret-here` 占位符
 
 ---
 
