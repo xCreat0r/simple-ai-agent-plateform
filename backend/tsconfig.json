@@ -15,6 +15,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*.ts", "cloudflare-env.d.ts"],
+  "include": ["src/**/*.ts", "worker-configuration.d.ts"],
   "exclude": ["node_modules"]
 }
