@@ -9,6 +9,7 @@ import {parsePdfBytes} from "@/lib/ai/pdf";
 import {generateId} from "@/lib/util/uuid";
 import {getHyperdriveConnectionString} from "@/lib/env-holder";
 import {config} from "@/lib/config";
+import {checkRateLimit} from "@/lib/rate-limit";
 import {checkKnowledgeStorage} from "@/lib/quota";
 import {deduplicateChunks} from "@/lib/util/text";
 import {decodeTextBuffer} from "@/lib/util/encoding";
@@ -105,6 +106,15 @@ knowledgeRoutes.post("/:id/documents", async (c) => {
         .from(knowledgeBases)
         .where(and(eq(knowledgeBases.id, id), eq(knowledgeBases.userId, userId)));
     if (!kb) return c.json({error: "Not found"}, 404);
+
+    // 上传限流：PDF 解析在主请求路径同步执行（最多 30s），
+    // 该接口是唯一的 CPU 消耗型入口，需防滥用；超限直接 429，不读取文件
+    const uploadRl = await checkRateLimit(
+        `kb-upload:${userId}`,
+        config.knowledge.uploadRatePerWindow,
+        config.rateLimit.windowMs
+    );
+    if (!uploadRl.allowed) return c.json({error: "请求过于频繁"}, 429);
 
     const formData = await c.req.formData();
     const file = formData.get("file") as File | null;
