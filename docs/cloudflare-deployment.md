@@ -267,16 +267,32 @@ npm run deploy
 
 ## 第五步：部署前端
 
+生产推荐 **Pages Functions 同源代理**：前端与 `/api` 完全同源（同一域名），
+`refresh_token` / `csrf_token` cookie 全部落在页面域，SameSite 与 Double-submit CSRF
+无需任何跨站配置即可正常工作，不依赖自定义域名。
+
+```
+用户浏览器 ──同源──> https://agent-platform.pages.dev (Pages: 静态资源 + /api 代理)
+                              └── /api/* ──服务器转发──> https://agent-platform-api.xxx.workers.dev (Worker)
+```
+
 ### 5.1 配置前端环境变量
 
-创建 `frontend/.env.production`：
+创建 `frontend/.env.production`，`VITE_API_URL` **留空**（同源相对路径）：
 
 ```bash
 # frontend/.env.production
-VITE_API_URL=https://api.your-domain.com
+VITE_API_URL=
 ```
 
-> `VITE_API_URL` 是前端**构建时**变量（Vite 编译时注入浏览器），**不是 Worker secret**，无需 `wrangler secret put`。值 = 后端 Worker 公开地址（`*.workers.dev` 或自定义域名）。
+> `VITE_API_URL` 是前端**构建时**变量（Vite 编译时注入浏览器），**不是 Worker secret**。
+> 留空时前端请求走同源 `/api/*`，由 Pages Function 转发；仅本地开发才填 `http://localhost:8787`。
+
+后端 Worker 地址配置在 Pages 项目环境变量 `API_ORIGIN`（运行时读取，可随时修改，无需重新构建前端）：
+
+- Pages 项目 → Settings → Environment variables → Production → 新增
+  - 变量名：`API_ORIGIN`
+  - 值：后端 Worker 公开地址，如 `https://agent-platform-api.xxx.workers.dev`
 
 ### 5.2 手动部署到 Pages
 
@@ -289,6 +305,8 @@ npx wrangler pages deploy dist --project-name agent-platform
 ```
 
 首次部署会创建 Pages 项目，输出 `https://agent-platform.pages.dev`。
+
+> 同源代理位于 `frontend/functions/` 目录，`wrangler pages deploy` 与 Git 集成均会自动包含并部署，无需额外配置。
 
 方式二：**Git 集成**（推荐）
 
@@ -305,15 +323,14 @@ npx wrangler pages deploy dist --project-name agent-platform
 
 ### 5.4 更新后端 CORS
 
-后端 CORS 白名单通过 `CORS_ORIGINS` 环境变量（逗号分隔）覆盖，**不要**直接改 `backend/src/index.ts` 的默认值（其默认包含占位域名，仅本地开发用）：
+同源代理下浏览器请求与 `/api` 同源，不触发 CORS，`CORS_ORIGINS` 不影响功能。但默认白名单含占位域名
+`https://app.agent-platform.com`，若该域名不属于你，建议用 `CORS_ORIGINS` 覆盖为真实前端域名或留空，避免跨源攻击面：
 
 ```bash
 cd backend
 npx wrangler secret put CORS_ORIGINS
-# 输入: https://app.your-domain.com,https://agent-platform.pages.dev
+# 输入: https://agent-platform.pages.dev（或直接输入空值回车，禁用跨站来源）
 ```
-
-> **重要**：默认白名单包含占位域名 `https://app.agent-platform.com`。若该域名不属于你，上线前必须用 `CORS_ORIGINS` 覆盖，否则存在跨源攻击面。
 
 修改后重新部署后端。
 
@@ -352,6 +369,13 @@ CI 流程：
 | `DASHSCOPE_BASE_URL` | 可选 | DashScope 兼容地址（默认官方 `https://dashscope.aliyuncs.com/compatible-mode/v1`） |
 | `DASHSCOPE_EMBEDDING_MODEL` | 可选 | 默认 `text-embedding-v3`（1024 维，与 schema 匹配） |
 | `ALLOW_SIGNUP` | 可选 | 注册开关，默认关闭；设 `true` 开放公开注册 |
+| `CORS_ORIGINS` | 可选 | 逗号分隔的跨站白名单；同源代理下无需配置，仅跨站直连时需要 |
+
+### Pages 项目环境变量
+
+| 变量 | 必填 | 说明 |
+|------|:--:|------|
+| `API_ORIGIN` | ✅ | 后端 Worker 公开地址，如 `https://agent-platform-api.xxx.workers.dev`；Pages Function 据此转发 `/api/*` |
 
 ### Cloudflare 绑定 (wrangler.jsonc)
 

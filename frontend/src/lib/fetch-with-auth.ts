@@ -1,7 +1,9 @@
 // 统一请求封装：token 管理 + 401 自动刷新重试。
 // JSON 请求与 SSE 流式请求共用，避免两套 401 逻辑分叉。
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:8787";
+// 生产环境前端与 /api 同源（Pages Functions 代理到后端 Worker），VITE_API_URL 留空走相对路径；
+// 本地开发直连本机后端（如 http://localhost:8787）
+const API = (import.meta.env.VITE_API_URL ?? "").trim().replace(/\/+$/, "");
 
 // 内存中保存 access token；refreshPromise 用于并发去重，避免多个请求同时刷新
 let accessToken: string | null = null;

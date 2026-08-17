@@ -6,6 +6,11 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	"vars": {
+		// Cloudflare Workers 不注入 NODE_ENV，显式声明以启用生产行为
+		// （cookie 同站/secure 属性、logger 生产日志开关等）
+		"NODE_ENV": "production"
+	},
 	"triggers": {
 		"crons": [
 			"0 */6 * * *"
