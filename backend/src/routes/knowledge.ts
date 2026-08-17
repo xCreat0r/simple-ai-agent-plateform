@@ -5,7 +5,7 @@ import {knowledgeBases, knowledgeDocuments, knowledgeChunks} from "@/lib/db/sche
 import {eq, desc, and, asc, inArray, sql, lt} from "drizzle-orm";
 import {splitText} from "@/lib/ai/chunker";
 import {generateEmbeddings} from "@/lib/ai/embedding";
-import {parsePdfBytes} from "@/lib/ai/pdf";
+import {parsePdfBytes, PdfUserError} from "@/lib/ai/pdf";
 import {generateId} from "@/lib/util/uuid";
 import {getHyperdriveConnectionString} from "@/lib/env-holder";
 import {config} from "@/lib/config";
@@ -139,9 +139,13 @@ knowledgeRoutes.post("/:id/documents", async (c) => {
         try {
             text = await parsePdf(arrBuf);
         } catch (err) {
-            // 解析失败（如扫描件无文字层 / base 服务不可用）返回可读错误，不落库
-            const message = err instanceof Error ? err.message : "PDF 解析失败";
-            return c.json({error: message}, 422);
+            // 解析失败返回白名单错误文案，不落库；
+            // PdfUserError.message 为可读文案，其余异常回通用文案并记日志
+            if (err instanceof PdfUserError) {
+                return c.json({error: err.message}, 422);
+            }
+            console.error("[knowledge] PDF 解析异常:", err);
+            return c.json({error: "PDF 解析失败"}, 422);
         }
     } else {
         text = decodeTextBuffer(arrBuf);
