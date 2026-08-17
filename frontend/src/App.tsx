@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
 
 // 路由懒加载：每个页面独立 chunk，按需下载
+const Landing = lazy(() => import("@/pages/landing").then((m) => ({ default: m.Landing })));
 const Login = lazy(() => import("@/pages/login").then((m) => ({ default: m.Login })));
 const Signup = lazy(() => import("@/pages/signup").then((m) => ({ default: m.Signup })));
 const AgentsList = lazy(() => import("@/pages/agents/list").then((m) => ({ default: m.AgentsList })));
@@ -33,6 +34,14 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// 落地页守卫：仅未登录用户可见，已登录用户访问跳转应用主页
+function GuestOnly({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <PageLoading />;
+  if (user) return <Navigate to="/agents" replace />;
+  return <>{children}</>;
+}
+
 // 页面懒加载占位：路由 chunk 下载期间的加载态
 function PageLoading() {
   return <div className="flex items-center justify-center h-screen text-neutral-500">加载中...</div>;
@@ -55,10 +64,10 @@ export default function App() {
         <AuthProvider>
           <Suspense fallback={<PageLoading />}>
             <Routes>
+              <Route path="/" element={<GuestOnly><Landing /></GuestOnly>} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               <Route element={<AuthGuard><AppLayout><Outlet /></AppLayout></AuthGuard>}>
-                <Route path="/" element={<Navigate to="/agents" replace />} />
                 <Route path="/agents" element={<AgentsList />} />
                 <Route path="/agents/new" element={<AgentNew />} />
                 <Route path="/agents/:id" element={<AgentDetail />} />

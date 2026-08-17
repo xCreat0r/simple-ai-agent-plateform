@@ -11,6 +11,7 @@
 - **自定义工具** — 可视化参数编辑器，无需手写 JSON Schema
 - **知识库 (RAG)** — 上传文档（TXT/Markdown/PDF）、自动分块、异步向量化、Agent 绑定知识库、相似度检索并标注来源
 - **用户认证** — 邮箱 + 密码登录，自研 JWT + refresh token 轮换，适合多人使用
+- **产品落地页** — 未登录访问 `/` 展示产品介绍与界面预览，引导登录/注册
 
 ## Tech Stack
 
@@ -94,7 +95,7 @@ npm run dev
    ```
 
    若需开放公开注册，在 `.env.local` 设 `ALLOW_SIGNUP=true` 后重启。
-2. 打开 `http://localhost:5173/login` 登录管理员账号
+2. 打开 `http://localhost:5173` 浏览产品落地页（未登录可见），或直接打开 `http://localhost:5173/login` 登录管理员账号
 3. 点击「新建」创建第一个 Agent：填写名称、系统提示词，勾选需要的工具
 4. 点击 Agent 进入聊天页面，发送消息开始对话
 
@@ -135,8 +136,8 @@ npm run dev
 │   ├── src/
 │   │   ├── App.tsx              # 路由 + Auth + QueryClient
 │   │   ├── main.tsx             # React 入口
-│   │   ├── pages/               # 页面组件 (agents / tools / knowledge / login / signup)
-│   │   ├── components/          # UI 组件 (chat / ui / sidebar / empty-state / confirm-dialog)
+│   │   ├── pages/               # 页面组件 (landing / agents / tools / knowledge / login / signup)
+│   │   ├── components/          # UI 组件 (chat / ui / sidebar / empty-state / confirm-dialog / landing)
 │   │   ├── hooks/               # useChat SSE Hook
 │   │   └── lib/                 # api 客户端 / auth 上下文 / types / utils
 │   └── vite.config.ts
