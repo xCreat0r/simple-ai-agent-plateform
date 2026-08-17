@@ -65,8 +65,11 @@ app.route("/api", protectedRoutes);
 // 流式响应（/api/chat）期间连接保持可用，直至流写完。
 async function handleRequest(request: Request, env: CloudflareEnv, ctx: ExecutionContext): Promise<Response> {
   try {
+    const { setEnv, getHyperdriveConnectionString } = await import("@/lib/env-holder");
+    // 先注入环境（绑定/secret），后续在 app.fetch 前的 getHyperdriveConnectionString
+    // 才能读到 HYPERDRIVE 连接串；否则会误回退到 process.env.DATABASE_URL
+    setEnv(env);
     const { withDb } = await import("@/lib/db");
-    const { getHyperdriveConnectionString } = await import("@/lib/env-holder");
     const connectionString = getHyperdriveConnectionString();
 
     if (!connectionString) {
