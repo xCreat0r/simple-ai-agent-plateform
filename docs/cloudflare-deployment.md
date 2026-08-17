@@ -312,10 +312,9 @@ npx wrangler pages deploy dist --project-name agent-platform
 
 在 Cloudflare Dashboard → Workers & Pages → Create → Pages → Connect to Git，选择仓库，设置：
 
-- **Build command**: `cd frontend && npm install && npm run build`
-- **Build output directory**: `frontend/dist`
-- **Environment variables**:
-  - `VITE_API_URL` → `https://api.your-domain.com`
+- **Root directory**: `frontend`
+- **Build command**: `npm install && npm run build`
+- **Build output directory**: `dist`
 
 ### 5.3 自定义域名
 
