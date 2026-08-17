@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { getDb } from "@/lib/db";
 import { agents, agentTools, agentKnowledge, tools, knowledgeBases } from "@/lib/db/schema";
-import { eq, desc, and, inArray } from "drizzle-orm";
+import { eq, desc, and, inArray, sql } from "drizzle-orm";
 import { parseBody } from "@/lib/validate";
 import { createAgentSchema, updateAgentSchema } from "@/lib/validators";
 import { generateId } from "@/lib/util/uuid";
+import { getPlan } from "@/lib/quota";
 import type { Env } from "./_middleware";
 
 
@@ -72,6 +73,17 @@ agentsRoutes.post("/", async (c) => {
   const body = parseBody(await c.req.json(), createAgentSchema);
 
   const db = getDb();
+
+  // 创建数量配额：达到上限拒绝，防资源滥用
+  const plan = getPlan(userId);
+  const [agentCountRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(agents)
+    .where(eq(agents.userId, userId));
+  if (Number(agentCountRow?.count ?? 0) >= plan.maxAgents) {
+    return c.json({ error: `已达创建上限（${plan.maxAgents} 个）` }, 429);
+  }
+
   if (body.tools.length > 0) {
     const existing = await db
       .select({ id: tools.id })

@@ -2,10 +2,11 @@ import { Hono } from "hono";
 import type { Env } from "./_middleware";
 import { getDb } from "@/lib/db";
 import { tools, agentTools } from "@/lib/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { parseBody } from "@/lib/validate";
 import { createToolSchema, updateToolSchema } from "@/lib/validators";
 import { generateId } from "@/lib/util/uuid";
+import { getPlan } from "@/lib/quota";
 
 import { getAllBuiltinTools } from "@/lib/tools";
 
@@ -27,6 +28,17 @@ toolsRoutes.get("/", async (c) => {
 toolsRoutes.post("/", async (c) => {
   const userId = c.get("userId");
   const body = parseBody(await c.req.json(), createToolSchema);
+
+  // 创建数量配额：达到上限拒绝，防资源滥用
+  const plan = getPlan(userId);
+  const [countRow] = await getDb()
+    .select({ count: sql<number>`count(*)` })
+    .from(tools)
+    .where(eq(tools.userId, userId));
+  if (Number(countRow?.count ?? 0) >= plan.maxTools) {
+    return c.json({ error: `已达创建上限（${plan.maxTools} 个）` }, 429);
+  }
+
   const toolId = generateId();
   const now = new Date();
   await getDb().insert(tools).values({
