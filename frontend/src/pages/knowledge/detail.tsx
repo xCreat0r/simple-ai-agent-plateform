@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -21,9 +21,11 @@ function statusBadge(doc: { status?: string; chunkCount: number; error?: string 
 
 export function KnowledgeDetail() {
   const { id: kbId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [deleteDocId, setDeleteDocId] = useState<string | null>(null);
+  const [deleteKbOpen, setDeleteKbOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -46,6 +48,14 @@ export function KnowledgeDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents", kbId] });
       setDeleteDocId(null);
+    },
+  });
+
+  const deleteKbMutation = useMutation({
+    mutationFn: () => api.deleteKnowledgeBase(kbId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge"] });
+      navigate("/knowledge");
     },
   });
 
@@ -72,7 +82,7 @@ export function KnowledgeDetail() {
           <h1 className="text-2xl font-bold text-neutral-900">{kb?.name || "知识库"}</h1>
           <p className="text-sm text-neutral-500">管理知识库文档</p>
         </div>
-        <div>
+        <div className="flex items-center gap-2">
           <input
             type="file"
             ref={fileInputRef}
@@ -82,6 +92,9 @@ export function KnowledgeDetail() {
           />
           <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
             <Upload className="mr-1 h-4 w-4" />{uploading ? "上传中..." : "上传文件"}
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => setDeleteKbOpen(true)} aria-label="删除知识库">
+            <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -141,6 +154,15 @@ export function KnowledgeDetail() {
         description="确定要删除此文档吗？此操作不可撤销。"
         onConfirm={() => deleteDocId && deleteMutation.mutate(deleteDocId)}
         loading={deleteMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={deleteKbOpen}
+        onOpenChange={setDeleteKbOpen}
+        title="删除知识库"
+        description="确定要删除此知识库吗？该知识库及其所有文档将被删除，此操作不可撤销。"
+        onConfirm={() => deleteKbMutation.mutate()}
+        loading={deleteKbMutation.isPending}
       />
     </div>
   );
