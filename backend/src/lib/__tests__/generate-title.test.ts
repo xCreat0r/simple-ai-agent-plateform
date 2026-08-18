@@ -8,8 +8,8 @@ vi.mock("@/lib/ai/provider", () => ({
   getModelForAgent: vi.fn(),
 }));
 // 记录查询排序方向：标题应基于最新一条 assistant 回复
-const mockDesc = vi.fn((col: unknown) => col);
-const mockAsc = vi.fn((col: unknown) => col);
+const mockDesc = vi.fn((...args: unknown[]) => args[0]);
+const mockAsc = vi.fn((...args: unknown[]) => args[0]);
 vi.mock("drizzle-orm", () => ({
   desc: (...args: unknown[]) => mockDesc(...args),
   asc: (...args: unknown[]) => mockAsc(...args),

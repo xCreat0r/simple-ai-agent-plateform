@@ -6,7 +6,14 @@ import { parseBody } from "@/lib/validate";
 import { createAgentSchema, updateAgentSchema } from "@/lib/validators";
 import { generateId } from "@/lib/util/uuid";
 import { getPlan } from "@/lib/quota";
+import { getBuiltinDef } from "@/lib/tools";
 import type { Env } from "./_middleware";
+
+// 过滤内置工具（web_search/web_request，不存 tools 表），
+// 仅返回需要校验归属的自定义工具 id
+function customToolIds(toolIds: string[]): string[] {
+  return toolIds.filter((id) => !getBuiltinDef(id));
+}
 
 
 const agentsRoutes = new Hono<Env>();
@@ -85,12 +92,16 @@ agentsRoutes.post("/", async (c) => {
   }
 
   if (body.tools.length > 0) {
-    const existing = await db
-      .select({ id: tools.id })
-      .from(tools)
-      .where(and(inArray(tools.id, body.tools), eq(tools.userId, userId)));
-    if (existing.length !== body.tools.length) {
-      return c.json({ error: "部分工具不存在或无权访问" }, 400);
+    // 只校验自定义工具归属：内置工具（web_search/web_request）不存 tools 表
+    const customTools = customToolIds(body.tools);
+    if (customTools.length > 0) {
+      const existing = await db
+        .select({ id: tools.id })
+        .from(tools)
+        .where(and(inArray(tools.id, customTools), eq(tools.userId, userId)));
+      if (existing.length !== customTools.length) {
+        return c.json({ error: "部分工具不存在或无权访问" }, 400);
+      }
     }
   }
   if (body.knowledgeBaseIds.length > 0) {
@@ -135,12 +146,16 @@ agentsRoutes.put("/:id", async (c) => {
 
   // 与 POST 一致：更新关联前校验工具/知识库归属当前用户，杜绝越权绑定他人资源
   if (body.tools !== undefined && body.tools.length > 0) {
-    const existing = await db
-      .select({ id: tools.id })
-      .from(tools)
-      .where(and(inArray(tools.id, body.tools), eq(tools.userId, userId)));
-    if (existing.length !== body.tools.length) {
-      return c.json({ error: "部分工具不存在或无权访问" }, 400);
+    // 只校验自定义工具归属：内置工具（web_search/web_request）不存 tools 表
+    const customTools = customToolIds(body.tools);
+    if (customTools.length > 0) {
+      const existing = await db
+        .select({ id: tools.id })
+        .from(tools)
+        .where(and(inArray(tools.id, customTools), eq(tools.userId, userId)));
+      if (existing.length !== customTools.length) {
+        return c.json({ error: "部分工具不存在或无权访问" }, 400);
+      }
     }
   }
   if (body.knowledgeBaseIds !== undefined && body.knowledgeBaseIds.length > 0) {
