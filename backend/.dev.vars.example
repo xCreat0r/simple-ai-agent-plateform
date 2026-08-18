@@ -1,0 +1,10 @@
+# 本地开发环境变量模板（复制为 .dev.vars 后填写）
+# wrangler dev 自动读取 backend/.dev.vars
+
+# JWT 签名密钥（生成方式: openssl rand -base64 32）
+JWT_SECRET=
+
+# DeepSeek API Key（真实对话与自动标题生成需要）
+DEEPSEEK_API_KEY=sk-your-key
+
+# 数据库通过 wrangler.jsonc 的 hyperdrive localConnectionString 提供，无需在此配置

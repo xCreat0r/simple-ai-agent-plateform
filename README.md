@@ -65,12 +65,14 @@ DATABASE_URL=postgres://postgres:YOUR_PASSWORD@localhost:5432/agent_platform \
 
 ```bash
 cd backend
-cp .env.example .env.local
-# 编辑 .env.local，填入 API Key
+cp .dev.vars.example .dev.vars   # 本地开发环境变量（wrangler dev 读取）
+# 编辑 .dev.vars，填入 JWT_SECRET 与 DeepSeek API Key（配置项参考根目录 .env.example）
 npm install
 npm run dev
 # → http://localhost:8787
 ```
+
+> 说明：本地开发用 `wrangler dev`，环境变量读取 `backend/.dev.vars`（数据库由 `wrangler.jsonc` 的 Hyperdrive `localConnectionString` 提供）。`.dev.vars` 已被 gitignore 排除，不提交。
 
 ### 前端
 
