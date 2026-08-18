@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -166,5 +166,13 @@ export function AgentForm({ initialData, onSuccess }: { initialData?: Partial<Ag
 
 export function AgentNew() {
   const navigate = useNavigate();
-  return <AgentForm onSuccess={() => navigate("/agents")} />;
+  const queryClient = useQueryClient();
+  return (
+    <AgentForm
+      onSuccess={() => {
+        queryClient.invalidateQueries({ queryKey: ["agents"] });
+        navigate("/agents");
+      }}
+    />
+  );
 }

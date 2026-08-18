@@ -20,6 +20,7 @@ export function AgentDetail() {
   const queryClient = useQueryClient();
   const [activeChatId, setActiveChatId] = useState<string | undefined>();
   const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
+  const [showDeleteAgent, setShowDeleteAgent] = useState(false);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   // 记录已提交改名的会话，防止 Enter 与失焦重复提交
@@ -63,6 +64,14 @@ export function AgentDetail() {
       if (deleteChatId === activeChatId) setActiveChatId(undefined);
       setDeleteChatId(null);
       queryClient.invalidateQueries({ queryKey: ["chats", agentId] });
+    },
+  });
+
+  const deleteAgentMutation = useMutation({
+    mutationFn: () => api.deleteAgent(agentId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      navigate("/agents");
     },
   });
 
@@ -111,6 +120,9 @@ export function AgentDetail() {
           <div className="flex gap-1">
             <Button variant="ghost" size="icon" onClick={() => navigate(`/agents/${agentId}/edit`)}>
               <Settings className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setShowDeleteAgent(true)}>
+              <Trash2 className="h-4 w-4 text-neutral-400 hover:text-red-600" />
             </Button>
           </div>
         </div>
@@ -198,6 +210,15 @@ export function AgentDetail() {
         description="确定要删除此对话吗？此操作不可撤销。"
         onConfirm={() => deleteChatId && deleteChatMutation.mutate(deleteChatId)}
         loading={deleteChatMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={showDeleteAgent}
+        onOpenChange={() => setShowDeleteAgent(false)}
+        title="删除 Agent"
+        description={`确定要删除「${agent?.name || ""}」吗？其下的所有对话也将一并删除，此操作不可撤销。`}
+        onConfirm={() => deleteAgentMutation.mutate()}
+        loading={deleteAgentMutation.isPending}
       />
     </div>
   );
