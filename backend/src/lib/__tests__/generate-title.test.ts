@@ -7,6 +7,15 @@ vi.mock("@/lib/ai/provider", () => ({
   openai: { chat: { completions: { create: vi.fn() } } },
   getModelForAgent: vi.fn(),
 }));
+// 记录查询排序方向：标题应基于最新一条 assistant 回复
+const mockDesc = vi.fn((col: unknown) => col);
+const mockAsc = vi.fn((col: unknown) => col);
+vi.mock("drizzle-orm", () => ({
+  desc: (...args: unknown[]) => mockDesc(...args),
+  asc: (...args: unknown[]) => mockAsc(...args),
+  and: (...args: unknown[]) => args,
+  eq: (...args: unknown[]) => args,
+}));
 
 import { generateChatTitle } from "@/lib/chat/generate-title";
 import { getDb } from "@/lib/db";
@@ -30,7 +39,7 @@ describe("generateChatTitle 让位逻辑", () => {
 
   it("titleEdited=true 时直接返回，不调用 LLM 生成标题", async () => {
     mockChatQuery([{ titleEdited: true }]);
-    await generateChatTitle("c1", "a1", "deepseek-chat", "用户问题");
+    await generateChatTitle("c1", "deepseek-chat", "用户问题");
     expect(createMock).not.toHaveBeenCalled();
   });
 
@@ -54,7 +63,10 @@ describe("generateChatTitle 让位逻辑", () => {
       choices: [{ message: { content: "测试标题" } }],
     } as never);
 
-    await generateChatTitle("c1", "a1", "deepseek-chat", "用户问题");
+    await generateChatTitle("c1", "deepseek-chat", "用户问题");
     expect(createMock).toHaveBeenCalledTimes(1);
+    // 素材应取最新一条 assistant 回复（desc），而非最早（asc）
+    expect(mockDesc).toHaveBeenCalled();
+    expect(mockAsc).not.toHaveBeenCalled();
   });
 });

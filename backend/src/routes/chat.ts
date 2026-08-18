@@ -129,7 +129,7 @@ chatRoutes.post("/", async (c) => {
         }).then(async () => {
           controller.close();
           // 首次对话在首个回复完成后异步生成标题（失败不影响主流程）
-          if (isFirstConversation) await generateChatTitle(chatId, agent.id, agent.model, userQuery);
+          if (isFirstConversation) await generateChatTitle(chatId, agent.model, userQuery);
         }).catch((err) => {
           // 错误以明确标记注入流，前端据此展示独立错误消息（不混入正文）。
           // 仅回显通用文案，真实错误进服务端日志，避免泄露内部细节

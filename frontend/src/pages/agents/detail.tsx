@@ -24,32 +24,30 @@ export function AgentDetail() {
   const [draftTitle, setDraftTitle] = useState("");
   // 记录已提交改名的会话，防止 Enter 与失焦重复提交
   const renameSubmittedRef = useRef<Record<string, boolean>>({});
-  // 标题刷新延迟 timer
-  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 标题刷新轮询：记录 isLoading 上一状态与已轮询次数
+  const prevLoadingRef = useRef(false);
+  const pollCountRef = useRef(0);
 
   const { data: agent } = useQuery({ queryKey: ["agent", agentId], queryFn: () => api.getAgent(agentId!), enabled: !!agentId });
   const { data: chats, isError: chatsError } = useQuery({ queryKey: ["chats", agentId], queryFn: () => api.getChats(agentId!), enabled: !!agentId });
 
   const { messages, streamingContent, sendMessage, stopGeneration, isLoading, regenerate } = useChat(agentId!, activeChatId);
 
-  // 流式结束后延迟刷新对话列表：给后端异步生成标题留出写入时间，避免标题滞后
+  // 流式结束后轮询刷新对话列表：后端异步生成标题时序不可控，
+  // 用 isLoading 下降沿触发，每 1.5s 刷新一次，最多 3 次（约 4.5s 窗口）
   useEffect(() => {
-    if (!isLoading) {
-      refreshTimerRef.current = setTimeout(() => {
+    const wasLoading = prevLoadingRef.current;
+    prevLoadingRef.current = isLoading;
+    if (wasLoading && !isLoading) {
+      pollCountRef.current = 0;
+      const timer = setInterval(() => {
+        pollCountRef.current += 1;
         queryClient.invalidateQueries({ queryKey: ["chats", agentId] });
+        if (pollCountRef.current >= 3) clearInterval(timer);
       }, 1500);
+      return () => clearInterval(timer);
     }
-    return () => {
-      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    };
   }, [isLoading, agentId, queryClient]);
-
-  // 组件卸载时清理刷新 timer
-  useEffect(() => {
-    return () => {
-      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
-    };
-  }, []);
 
   const createChatMutation = useMutation({
     mutationFn: () => api.createChat({ agentId: agentId! }),

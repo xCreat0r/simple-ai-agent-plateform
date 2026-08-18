@@ -1,11 +1,10 @@
 import { getDb } from "@/lib/db";
-import { asc, and, eq } from "drizzle-orm";
+import { desc, and, eq } from "drizzle-orm";
 import { chats, messages } from "@/lib/db/schema";
 import { openai } from "@/lib/ai/provider";
 
 export async function generateChatTitle(
   chatId: string,
-  agentId: string,
   model: string,
   userQuery: string,
 ): Promise<void> {
@@ -17,12 +16,13 @@ export async function generateChatTitle(
       .where(eq(chats.id, chatId));
     if (chat?.titleEdited) return;
 
-    // 取该对话最早的一条 assistant 回复作为标题生成的素材
+    // 取该对话最新一条 assistant 回复作为标题生成的素材
+    // （最终回答最有代表性；工具调用消息可能 content 为空，不可取）
     const [assistantMsg] = await getDb()
     .select({ content: messages.content })
       .from(messages)
       .where(and(eq(messages.chatId, chatId), eq(messages.role, "assistant")))
-      .orderBy(asc(messages.createdAt))
+      .orderBy(desc(messages.createdAt))
       .limit(1);
 
     if (!assistantMsg?.content) return;
