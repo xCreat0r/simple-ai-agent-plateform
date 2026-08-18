@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -140,7 +140,8 @@ function ToolForm({ initialData, onSuccess }: { initialData?: Partial<Tool>; onS
 
 export function ToolNew() {
   const navigate = useNavigate();
-  return <ToolForm onSuccess={() => navigate("/tools")} />;
+  const queryClient = useQueryClient();
+  return <ToolForm onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["tools"] }); navigate("/tools"); }} />;
 }
 
 export { ToolForm };
