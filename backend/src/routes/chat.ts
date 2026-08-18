@@ -3,7 +3,7 @@ import type { Env } from "./_middleware";
 import { stream } from "hono/streaming";
 import { getDb } from "@/lib/db";
 import { agents, agentTools, chats, messages } from "@/lib/db/schema";
-import { and, desc, eq, gt, inArray } from "drizzle-orm";
+import { and, count, desc, eq, gt, inArray } from "drizzle-orm";
 import { getToolDefinitions } from "@/lib/tools/db-tools";
 import { buildConversationMessages } from "@/lib/chat/build-context";
 import { injectKnowledgeContext } from "@/lib/chat/retrieve";
@@ -51,7 +51,6 @@ chatRoutes.post("/", async (c) => {
   const enabledToolIds = toolRows.map((r) => r.toolId);
 
   let chatId = existingChatId;
-  const isNewChat = !chatId;
   if (!chatId) {
     // 新对话：先创建 chat 记录，标题先用首条消息截断占位
     chatId = generateId();
@@ -69,6 +68,13 @@ chatRoutes.post("/", async (c) => {
       .limit(1);
     if (!existing) return c.json({ error: "对话不存在或无权访问" }, 404);
   }
+
+  // 判断该对话是否首次对话（尚无任何消息），首轮回复完成后生成标题
+  const [{ count: existingMsgCount }] = await db
+    .select({ count: count() })
+    .from(messages)
+    .where(eq(messages.chatId, chatId));
+  const isFirstConversation = existingMsgCount === 0;
 
   if (regenerate) {
     // 重新生成：找到最后一条用户消息，删除其后所有 assistant/tool 消息，
@@ -122,8 +128,8 @@ chatRoutes.post("/", async (c) => {
           chatId, model: agent.model, temperature: agent.temperature, maxTokens: agent.maxTokens, userId,
         }).then(async () => {
           controller.close();
-          // 新对话在首个回复完成后异步生成标题（失败不影响主流程）
-          if (isNewChat) await generateChatTitle(chatId, agent.id, agent.model, userQuery);
+          // 首次对话在首个回复完成后异步生成标题（失败不影响主流程）
+          if (isFirstConversation) await generateChatTitle(chatId, agent.id, agent.model, userQuery);
         }).catch((err) => {
           // 错误以明确标记注入流，前端据此展示独立错误消息（不混入正文）。
           // 仅回显通用文案，真实错误进服务端日志，避免泄露内部细节
