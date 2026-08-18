@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowLeft } from "lucide-react";
 import type { Tool } from "@/lib/types";
 
 const methodOptions = [
@@ -78,6 +79,13 @@ function ToolForm({ initialData, onSuccess }: { initialData?: Partial<Tool>; onS
   };
 
   return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/tools")} aria-label="返回工具列表">
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <h1 className="text-lg font-semibold text-neutral-900">{initialData ? "编辑工具" : "新建工具"}</h1>
+      </div>
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
@@ -135,6 +143,7 @@ function ToolForm({ initialData, onSuccess }: { initialData?: Partial<Tool>; onS
         <Button type="button" variant="outline" onClick={() => navigate("/tools")}>取消</Button>
       </div>
     </form>
+    </div>
   );
 }
 

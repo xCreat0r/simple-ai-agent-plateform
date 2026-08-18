@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowLeft } from "lucide-react";
 
 export function KnowledgeNew() {
   const navigate = useNavigate();
@@ -30,6 +31,12 @@ export function KnowledgeNew() {
 
   return (
     <div className="max-w-md">
+      <div className="mb-4 flex items-center gap-2">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/knowledge")} aria-label="返回知识库列表">
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <h1 className="text-lg font-semibold text-neutral-900">新建知识库</h1>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>新建知识库</CardTitle>

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowLeft } from "lucide-react";
 import type { Agent } from "@/lib/types";
 
 const modelOptions = [
@@ -60,6 +61,13 @@ export function AgentForm({ initialData, onSuccess }: { initialData?: Partial<Ag
   };
 
   return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/agents")} aria-label="返回 Agent 列表">
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <h1 className="text-lg font-semibold text-neutral-900">{initialData ? "编辑 Agent" : "新建 Agent"}</h1>
+      </div>
     <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
@@ -161,6 +169,7 @@ export function AgentForm({ initialData, onSuccess }: { initialData?: Partial<Ag
         <Button type="button" variant="outline" onClick={() => navigate("/agents")}>取消</Button>
       </div>
     </form>
+    </div>
   );
 }
 

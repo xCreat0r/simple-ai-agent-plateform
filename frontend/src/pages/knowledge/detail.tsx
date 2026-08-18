@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/ca
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { FileText, Upload, Trash2 } from "lucide-react";
+import { FileText, Upload, Trash2, ArrowLeft } from "lucide-react";
 
 function statusBadge(doc: { status?: string; chunkCount: number; error?: string }) {
   if (doc.status === "processing") {
@@ -78,9 +78,14 @@ export function KnowledgeDetail() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">{kb?.name || "知识库"}</h1>
-          <p className="text-sm text-neutral-500">管理知识库文档</p>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/knowledge")} aria-label="返回知识库列表">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-neutral-900">{kb?.name || "知识库"}</h1>
+            <p className="text-sm text-neutral-500">管理知识库文档</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <input

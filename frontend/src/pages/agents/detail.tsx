@@ -12,7 +12,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ChatInput } from "@/components/chat/chat-input";
 import { useChat } from "@/hooks/useChat";
-import { MessageSquare, Plus, Trash2, Settings, MessageCircle, Pencil } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Settings, MessageCircle, Pencil, ArrowLeft } from "lucide-react";
 
 export function AgentDetail() {
   const { id: agentId } = useParams<{ id: string }>();
@@ -116,7 +116,12 @@ export function AgentDetail() {
     <div className="flex h-full gap-0 -m-6">
       <div className="flex w-72 shrink-0 flex-col border-r border-neutral-200">
         <div className="flex items-center justify-between border-b border-neutral-200 p-3">
-          <span className="truncate text-sm font-semibold">{agent?.name || "加载中..."}</span>
+          <div className="flex min-w-0 items-center gap-2">
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => navigate("/agents")} aria-label="返回 Agent 列表">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <span className="truncate text-sm font-semibold">{agent?.name || "加载中..."}</span>
+          </div>
           <div className="flex gap-1">
             <Button variant="ghost" size="icon" onClick={() => navigate(`/agents/${agentId}/edit`)}>
               <Settings className="h-4 w-4" />
