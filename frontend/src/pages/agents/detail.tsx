@@ -2,16 +2,17 @@ import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { Chat } from "@/lib/types";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ChatMessages } from "@/components/chat/chat-messages";
 import { ChatInput } from "@/components/chat/chat-input";
 import { useChat } from "@/hooks/useChat";
-import { MessageSquare, Plus, Trash2, Settings, MessageCircle } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Settings, MessageCircle, Pencil } from "lucide-react";
 
 export function AgentDetail() {
   const { id: agentId } = useParams<{ id: string }>();
@@ -19,18 +20,36 @@ export function AgentDetail() {
   const queryClient = useQueryClient();
   const [activeChatId, setActiveChatId] = useState<string | undefined>();
   const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  // 记录已提交改名的会话，防止 Enter 与失焦重复提交
+  const renameSubmittedRef = useRef<Record<string, boolean>>({});
+  // 标题刷新延迟 timer
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: agent } = useQuery({ queryKey: ["agent", agentId], queryFn: () => api.getAgent(agentId!), enabled: !!agentId });
   const { data: chats, isError: chatsError } = useQuery({ queryKey: ["chats", agentId], queryFn: () => api.getChats(agentId!), enabled: !!agentId });
 
   const { messages, streamingContent, sendMessage, stopGeneration, isLoading, regenerate } = useChat(agentId!, activeChatId);
 
-  // 流式结束后刷新对话列表，让异步生成的标题及时显示
+  // 流式结束后延迟刷新对话列表：给后端异步生成标题留出写入时间，避免标题滞后
   useEffect(() => {
     if (!isLoading) {
-      queryClient.invalidateQueries({ queryKey: ["chats", agentId] });
+      refreshTimerRef.current = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["chats", agentId] });
+      }, 1500);
     }
+    return () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    };
   }, [isLoading, agentId, queryClient]);
+
+  // 组件卸载时清理刷新 timer
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    };
+  }, []);
 
   const createChatMutation = useMutation({
     mutationFn: () => api.createChat({ agentId: agentId! }),
@@ -48,6 +67,37 @@ export function AgentDetail() {
       queryClient.invalidateQueries({ queryKey: ["chats", agentId] });
     },
   });
+
+  const renameChatMutation = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => api.updateChat(id, title),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["chats", agentId] });
+    },
+    onSettled: (_data, _error, { id }) => {
+      delete renameSubmittedRef.current[id];
+    },
+  });
+
+  // 进入编辑态
+  const startRename = (chat: Chat) => {
+    setEditingChatId(chat.id);
+    setDraftTitle(chat.title || "");
+  };
+
+  // 提交改名：空标题/未变更不提交，Enter 与失焦共用，防止重复提交
+  const commitRename = (chat: Chat) => {
+    const trimmed = draftTitle.trim();
+    if (!trimmed || trimmed === chat.title || renameSubmittedRef.current[chat.id]) {
+      setEditingChatId(null);
+      return;
+    }
+    renameSubmittedRef.current[chat.id] = true;
+    setEditingChatId(null);
+    renameChatMutation.mutate({ id: chat.id, title: trimmed });
+  };
+
+  // 取消编辑
+  const cancelRename = () => setEditingChatId(null);
 
   useEffect(() => {
     if (chats && chats.length > 0 && !activeChatId) {
@@ -83,13 +133,37 @@ export function AgentDetail() {
                   className={`group flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm ${activeChatId === chat.id ? "bg-neutral-200 text-neutral-900" : "text-neutral-600 hover:bg-neutral-100"}`}
                   onClick={() => setActiveChatId(chat.id)}
                 >
-                  <span className="truncate">{chat.title || "新对话"}</span>
-                  <button
-                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); setDeleteChatId(chat.id); }}
-                    className="hidden shrink-0 text-neutral-400 hover:text-red-600 group-hover:block focus-visible:block"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  {editingChatId === chat.id ? (
+                    <Input
+                      autoFocus
+                      value={draftTitle}
+                      onChange={(e) => setDraftTitle(e.target.value)}
+                      onBlur={() => commitRename(chat)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitRename(chat);
+                        else if (e.key === "Escape") cancelRename();
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-7 px-2 py-1"
+                    />
+                  ) : (
+                    <span className="min-w-0 flex-1 truncate">{chat.title || "新对话"}</span>
+                  )}
+                  <span className="flex shrink-0 items-center gap-1">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); startRename(chat); }}
+                      className="hidden rounded p-1 text-neutral-400 hover:text-neutral-700 group-hover:block focus-visible:block"
+                      aria-label="重命名"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={(e: React.MouseEvent) => { e.stopPropagation(); setDeleteChatId(chat.id); }}
+                      className="hidden shrink-0 text-neutral-400 hover:text-red-600 group-hover:block focus-visible:block"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
                 </div>
               ))}
             </div>
@@ -113,7 +187,7 @@ export function AgentDetail() {
           />
         ) : (
           <>
-            <ChatMessages messages={messages} streamingContent={streamingContent} onRegenerate={regenerate} />
+            <ChatMessages messages={messages} streamingContent={streamingContent} onRegenerate={regenerate} isLoading={isLoading} />
             <ChatInput key={activeChatId} onSend={sendMessage} onStop={stopGeneration} loading={isLoading} />
           </>
         )}

@@ -8,9 +8,10 @@ interface ChatMessagesProps {
   messages: Message[];
   streamingContent?: string;
   onRegenerate?: () => void;
+  isLoading?: boolean;
 }
 
-function ChatMessagesInner({ messages, streamingContent, onRegenerate }: ChatMessagesProps) {
+function ChatMessagesInner({ messages, streamingContent, onRegenerate, isLoading }: ChatMessagesProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -77,6 +78,16 @@ function ChatMessagesInner({ messages, streamingContent, onRegenerate }: ChatMes
         <div className="flex justify-start">
           <div className="max-w-[80%] rounded-lg bg-neutral-100 px-4 py-2 text-neutral-900">
             <Markdown content={streamingContent} />
+          </div>
+        </div>
+      )}
+      {isLoading && !streamingContent && (
+        <div className="flex justify-start">
+          <div className="flex items-center gap-1.5 rounded-lg bg-neutral-100 px-4 py-2.5">
+            <span className="h-2 w-2 animate-bounce rounded-full bg-neutral-400" style={{ animationDelay: "0ms" }} />
+            <span className="h-2 w-2 animate-bounce rounded-full bg-neutral-400" style={{ animationDelay: "150ms" }} />
+            <span className="h-2 w-2 animate-bounce rounded-full bg-neutral-400" style={{ animationDelay: "300ms" }} />
+            <span className="ml-1.5 text-xs text-neutral-400">正在思考…</span>
           </div>
         </div>
       )}

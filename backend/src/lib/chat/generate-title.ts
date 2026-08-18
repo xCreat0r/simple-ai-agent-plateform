@@ -10,6 +10,13 @@ export async function generateChatTitle(
   userQuery: string,
 ): Promise<void> {
   try {
+    // 用户手动改过名则不自动覆盖
+    const [chat] = await getDb()
+      .select({ titleEdited: chats.titleEdited })
+      .from(chats)
+      .where(eq(chats.id, chatId));
+    if (chat?.titleEdited) return;
+
     // 取该对话最早的一条 assistant 回复作为标题生成的素材
     const [assistantMsg] = await getDb()
     .select({ content: messages.content })

@@ -61,7 +61,7 @@ chatsRoutes.patch("/:id", async (c) => {
     .limit(1);
   if (!chat) return c.json({ error: "Not found" }, 404);
 
-  await getDb().update(chats).set({ title }).where(eq(chats.id, id));
+  await getDb().update(chats).set({ title, titleEdited: true }).where(eq(chats.id, id));
   return c.json({ ok: true });
 });
 
