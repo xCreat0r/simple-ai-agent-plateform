@@ -119,8 +119,22 @@ export function Landing() {
 
       {/* 页脚 */}
       <footer className="bg-neutral-900 pb-8">
-        <div className="mx-auto max-w-6xl px-6 pt-8 text-center text-sm text-neutral-500">
-          © {new Date().getFullYear()} Simple AI Agent Platform
+        <div className="mx-auto max-w-6xl px-6 pt-8 text-center">
+          <div className="flex flex-col items-center justify-center gap-3 text-sm text-neutral-400 sm:flex-row sm:gap-6">
+            <span>联系作者：</span>
+            <a href="mailto:ljh6c6a68@gmail.com" className="hover:text-white">
+              ljh6c6a68@gmail.com
+            </a>
+            <a href="https://x.com/xCreat0r" target="_blank" rel="noopener noreferrer" className="hover:text-white">
+              @xCreat0r
+            </a>
+            <a href="https://github.com/xCreat0r" target="_blank" rel="noopener noreferrer" className="hover:text-white">
+              github.com/xCreat0r
+            </a>
+          </div>
+          <div className="pt-4 text-center text-sm text-neutral-500">
+            © {new Date().getFullYear()} Simple AI Agent Platform
+          </div>
         </div>
       </footer>
     </div>
